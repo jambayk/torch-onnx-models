@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=77.0", "wheel"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,10 +7,12 @@ name = "torch-onnx-models"
 version = "0.1.0"
 description = "Models and components for PyTorch and ONNX."
 authors = [
-	{ name = "jambayk" }
+    { name = "Jambay Kinley", email = "jambaykinley@microsoft.com" },
+    { name = "Justin Chu", email = "justinchu@microsoft.com" },
+
 ]
 readme = "README.md"
-license = { file = "LICENSE" }
+license = "MIT"
 dependencies = [
 	"torch>=2.8.0",
 	"onnx",
