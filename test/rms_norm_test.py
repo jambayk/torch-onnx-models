@@ -6,7 +6,7 @@ from torch.onnx._internal.exporter import _testing as onnx_testing
 from torch_onnx_models.components._rms_norm import RMSNorm
 
 
-class TestRMSNorm(unittest.TestCase):
+class RMSNormTest(unittest.TestCase):
     @parameterized.parameterized.expand(
         [
             ("ort", 18),
