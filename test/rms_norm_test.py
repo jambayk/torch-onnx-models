@@ -21,6 +21,11 @@ class RMSNormTest(unittest.TestCase):
 
         input = torch.randn(2, 128, 768)
 
+        ref_model = RMSNorm(hidden_size=hidden_size, mode="onnx")
+        ref_model.eval()
+
+        ref_ep = torch.export.export(ref_model, (input,))
+
         onnx_program = torch.onnx.export(
             model,
             (input,),
@@ -29,6 +34,8 @@ class RMSNormTest(unittest.TestCase):
             dynamo=True,
             verbose=False,
         )
+
+        onnx_program.exported_program = ref_ep
         onnx_testing.assert_onnx_program(onnx_program)
 
 
