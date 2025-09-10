@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Modifications copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
 import logging
 import math
 from collections import OrderedDict
@@ -22,7 +25,7 @@ from torch import Tensor, nn
 logger = logging.getLogger(__name__)
 
 
-class PytorchGELUTanh(nn.Module):
+class GELUTanh(nn.Module):
     """
     A fast C implementation of the tanh approximation of the GeLU activation function. See
     https://arxiv.org/abs/1606.08415.
@@ -35,16 +38,6 @@ class PytorchGELUTanh(nn.Module):
         return nn.functional.gelu(input, approximate="tanh")
 
 
-class NewGELUActivation(nn.Module):
-    """
-    Implementation of the GELU activation function currently in Google BERT repo (identical to OpenAI GPT). Also see
-    the Gaussian Error Linear Units paper: https://arxiv.org/abs/1606.08415
-    """
-
-    def forward(self, input: Tensor) -> Tensor:
-        return 0.5 * input * (1.0 + torch.tanh(math.sqrt(2.0 / math.pi) * (input + 0.044715 * torch.pow(input, 3.0))))
-
-
 class GELUActivation(nn.Module):
     """
     Original Implementation of the GELU activation function in Google BERT repo when initially created. For
@@ -52,19 +45,8 @@ class GELUActivation(nn.Module):
     torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3)))) This is now written in C in nn.functional
     Also see the Gaussian Error Linear Units paper: https://arxiv.org/abs/1606.08415
     """
-
-    def __init__(self, use_gelu_python: bool = False):
-        super().__init__()
-        if use_gelu_python:
-            self.act = self._gelu_python
-        else:
-            self.act = nn.functional.gelu
-
-    def _gelu_python(self, input: Tensor) -> Tensor:
-        return input * 0.5 * (1.0 + torch.erf(input / math.sqrt(2.0)))
-
     def forward(self, input: Tensor) -> Tensor:
-        return self.act(input)
+        return nn.functional.gelu(input)
 
 
 class FastGELUActivation(nn.Module):
@@ -187,8 +169,8 @@ ACT2CLS = {
     "gelu": GELUActivation,
     "gelu_10": (ClippedGELUActivation, {"min": -10, "max": 10}),
     "gelu_fast": FastGELUActivation,
-    "gelu_new": NewGELUActivation,
-    "gelu_pytorch_tanh": PytorchGELUTanh,
+    "gelu_new": GELUActivation,
+    "gelu_pytorch_tanh": GELUTanh,
     "gelu_accurate": AccurateGELUActivation,
     "laplace": LaplaceActivation,
     "leaky_relu": nn.LeakyReLU,
@@ -214,10 +196,10 @@ def get_activation(activation_string):
         raise KeyError(f"function {activation_string} not found in ACT2FN mapping {list(ACT2FN.keys())}")
 
 
-gelu_new = get_activation("gelu_new")
-gelu = get_activation("gelu")
-gelu_fast = get_activation("gelu_fast")
-quick_gelu = get_activation("quick_gelu")
-silu = get_activation("silu")
-mish = get_activation("mish")
-linear_act = get_activation("linear")
+# gelu_new = get_activation("gelu_new")
+# gelu = get_activation("gelu")
+# gelu_fast = get_activation("gelu_fast")
+# quick_gelu = get_activation("quick_gelu")
+# silu = get_activation("silu")
+# mish = get_activation("mish")
+# linear_act = get_activation("linear")
