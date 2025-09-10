@@ -15,8 +15,8 @@ class RMSNorm(nn.Module):
         if torch.onnx.is_in_onnx_export():
             if self._config == "ort":
                 return torch.onnx.ops.symbolic(
-                    "com.microsoft::SkipSimplifiedLayerNormalization",
-                    [hidden_states, None, self.weight],
+                    "ai.onnx::SimplifiedLayerNormalization",
+                    [hidden_states, self.weight],
                     attrs={"epsilon": self.variance_epsilon},
                     dtype=hidden_states.dtype,
                     shape=hidden_states.shape,
@@ -24,6 +24,4 @@ class RMSNorm(nn.Module):
                 )
         # This will produce the correct ONNX standard ops based on the opset requested
         # rms_norm(Tensor input, SymInt[] normalized_shape, Tensor? weight=None, float? eps=None) -> Tensor
-        return torch.ops.aten.rms_norm(
-            hidden_states, (hidden_states.size(-1),), self.weight, self.variance_epsilon
-        )
+        return torch.ops.aten.rms_norm(hidden_states, (hidden_states.size(-1),), self.weight, self.variance_epsilon)
