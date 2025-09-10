@@ -22,6 +22,8 @@ from collections import OrderedDict
 import torch
 from torch import Tensor, nn
 
+from torch_onnx_models import _global_configs
+
 logger = logging.getLogger(__name__)
 
 
@@ -45,17 +47,9 @@ class GELUActivation(nn.Module):
     torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3)))) This is now written in C in nn.functional
     Also see the Gaussian Error Linear Units paper: https://arxiv.org/abs/1606.08415
     """
+
     def forward(self, input: Tensor) -> Tensor:
         return nn.functional.gelu(input)
-
-
-class FastGELUActivation(nn.Module):
-    """
-    Applies GELU approximation that is slower than QuickGELU but more accurate. See: https://github.com/hendrycks/GELUs
-    """
-
-    def forward(self, input: Tensor) -> Tensor:
-        return 0.5 * input * (1.0 + torch.tanh(input * 0.7978845608 * (1.0 + 0.044715 * input * input)))
 
 
 class QuickGELUActivation(nn.Module):
@@ -64,6 +58,14 @@ class QuickGELUActivation(nn.Module):
     """
 
     def forward(self, input: Tensor) -> Tensor:
+        if torch.onnx.is_in_onnx_export() and _global_configs.target == "ort":
+            return torch.onnx.ops.symbolic(
+                "com.microsoft::QuickGelu",
+                [input],
+                dtype=input.dtype,
+                shape=input.shape,
+                version=1,
+            )
         return input * torch.sigmoid(1.702 * input)
 
 
@@ -89,7 +91,7 @@ class ClippedGELUActivation(nn.Module):
         self.max = max
 
     def forward(self, x: Tensor) -> Tensor:
-        return torch.clip(gelu(x), self.min, self.max)
+        return torch.clip(nn.functional.gelu(x), self.min, self.max)
 
 
 class AccurateGELUActivation(nn.Module):
@@ -105,7 +107,16 @@ class AccurateGELUActivation(nn.Module):
         self.precomputed_constant = math.sqrt(2 / math.pi)
 
     def forward(self, input: Tensor) -> Tensor:
-        return 0.5 * input * (1 + torch.tanh(self.precomputed_constant * (input + 0.044715 * torch.pow(input, 3))))
+        return (
+            0.5
+            * input
+            * (
+                1
+                + torch.tanh(
+                    self.precomputed_constant * (input + 0.044715 * torch.pow(input, 3))
+                )
+            )
+        )
 
 
 class MishActivation(nn.Module):
@@ -114,15 +125,8 @@ class MishActivation(nn.Module):
     visit the official repository for the paper: https://github.com/digantamisra98/Mish
     """
 
-    def __init__(self):
-        super().__init__()
-        self.act = nn.functional.mish
-
-    def _mish_python(self, input: Tensor) -> Tensor:
-        return input * torch.tanh(nn.functional.softplus(input))
-
     def forward(self, input: Tensor) -> Tensor:
-        return self.act(input)
+        return nn.functional.mish(input)
 
 
 class LinearActivation(nn.Module):
@@ -168,7 +172,7 @@ class ClassInstantier(OrderedDict):
 ACT2CLS = {
     "gelu": GELUActivation,
     "gelu_10": (ClippedGELUActivation, {"min": -10, "max": 10}),
-    "gelu_fast": FastGELUActivation,
+    "gelu_fast": GELUTanh,
     "gelu_new": GELUActivation,
     "gelu_pytorch_tanh": GELUTanh,
     "gelu_accurate": AccurateGELUActivation,
@@ -193,7 +197,9 @@ def get_activation(activation_string):
     if activation_string in _ACT2FN:
         return _ACT2FN[activation_string]
     else:
-        raise KeyError(f"function {activation_string} not found in ACT2FN mapping {list(ACT2FN.keys())}")
+        raise KeyError(
+            f"function {activation_string} not found in ACT2FN mapping {list(ACT2FN.keys())}"
+        )
 
 
 # gelu_new = get_activation("gelu_new")
