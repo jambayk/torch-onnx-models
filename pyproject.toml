@@ -18,3 +18,6 @@ dependencies = [
 	"onnx",
     "onnxscript",
 ]
+
+[tool.pytest.ini_options]
+addopts = "--tb=short --color=yes"
