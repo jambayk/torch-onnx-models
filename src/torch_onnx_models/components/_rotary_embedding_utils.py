@@ -39,7 +39,7 @@ def apply_rope(
     batch_size, _, seq_length, head_dim = x.shape
     # there is a bug in the implementation of the torch.onnx.ops.rotary_embedding
     # reshape to 3D shape (batch_size, seq_length, num_heads * head_dim)
-    x = x.permute(0, 2, 1, 3).reshape(batch_size, seq_length, num_heads * head_dim)
+    x = x.transpose(1, 2).contiguous().reshape(batch_size, seq_length, num_heads * head_dim)
     x = torch.onnx.ops.rotary_embedding(
         x,
         cos_cache,
@@ -48,7 +48,7 @@ def apply_rope(
         rotary_embedding_dim=rotary_embedding_dim,
         num_heads=num_heads,
     )
-    return x.view(batch_size, seq_length, num_heads, head_dim).permute(0, 2, 1, 3)
+    return x.reshape(batch_size, seq_length, num_heads, head_dim).transpose(1, 2).contiguous()
 
 
 def apply_rope_decomposed(
@@ -126,13 +126,11 @@ def apply_rope_contrib(
     Returns:
         torch.Tensor: The transformed hidden states with RoPE applied, of the same shape as input.
     """
-    return (
-        torch.onnx.ops.symbolic(
-            "com.microsoft::RotaryEmbedding",
-            [x, position_ids, cos_cache, sin_cache],
-            attrs={"num_heads": num_heads, "rotary_embedding_dim": rotary_embedding_dim},
-            dtypes=x.dtype,
-            shapes=x.shape,
-            version=1,
-        ),
+    return torch.onnx.ops.symbolic(
+        "com.microsoft::RotaryEmbedding",
+        [x, position_ids, cos_cache, sin_cache],
+        attrs={"num_heads": num_heads, "rotary_embedding_dim": rotary_embedding_dim},
+        dtype=x.dtype,
+        shape=x.shape,
+        version=1,
     )

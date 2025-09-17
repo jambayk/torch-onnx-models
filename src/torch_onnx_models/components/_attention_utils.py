@@ -32,6 +32,11 @@ def create_attention_bias(
 
 
 # TODO(jambayk): add doc strings for shape of outputs
+# should we work on 3d inputs instead. ops like Attention, GroupQueryAttention, MultiHeadAttention, RotaryEmbedding seem to be
+# optimized for 3d inputs of shape (batch_size, seq_length, hidden_size)
+# otherwise, there is a lot of transposes and we probably would need to do graph surgery to eliminate them.
+# Hardest would be to change the shape of the kv cache inputs/outputs
+# but the decomposed attention function would have multiple reshapes inside
 # should we make scale optional? maybe not since it requires us to get the head_dim from the input shape
 def attention(
     *,
@@ -144,6 +149,7 @@ def attention_contrib_mha(
     Returns:
         tuple[torch.Tensor, torch.Tensor, torch.Tensor]: A tuple containing the attention output, present key, and present value.
     """
+    original_v_shape = value.shape
     # TODO(jambayk): put some guidance that conditions on scalar attributes are ok
     if past_key is not None and past_value is not None:
         key = torch.cat([past_key, key], dim=2)
@@ -153,15 +159,15 @@ def attention_contrib_mha(
         key = key.repeat_interleave(q_num_heads // kv_num_heads, dim=1)
         value = value.repeat_interleave(q_num_heads // kv_num_heads, dim=1)
 
-    batch_size, _, seq_length, v_head_size = value.shape
-
     return (
         torch.onnx.ops.symbolic(
             "com.microsoft::MultiHeadAttention",
             [query, key, value, None, None, bias],
             attrs={"num_heads": q_num_heads, "scale": scale},
             dtype=value.dtype,
-            shape=(batch_size, seq_length, v_head_size),
+            # need to check what the correct shape is here
+            # same shape as value or (batch_size, seq_length, kv_num_heads * v_head_size)?
+            shape=original_v_shape,
             version=1,
         ),
         key,

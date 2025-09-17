@@ -3,8 +3,8 @@ from __future__ import annotations
 import torch
 from torch import nn
 from argparse import Namespace
-from torch_onnx_models.components._attention_utils import attention, attention_decomposed
-from torch_onnx_models.components._rotary_embedding_utils import apply_rope, apply_rope_decomposed
+from torch_onnx_models.components._attention_utils import attention, attention_decomposed, attention_contrib_mha
+from torch_onnx_models.components._rotary_embedding_utils import apply_rope, apply_rope_decomposed, apply_rope_contrib
 
 
 class Attention(nn.Module):
@@ -37,12 +37,14 @@ class Attention(nn.Module):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        query_states = self.q_proj(hidden_states).reshape(hidden_shape).transpose(1, 2).contiguous()
+        key_states = self.k_proj(hidden_states).reshape(hidden_shape).transpose(1, 2).contiguous()
+        value_states = self.v_proj(hidden_states).reshape(hidden_shape).transpose(1, 2).contiguous()
+
         # just for testing
         rope_func = apply_rope
         # rope_func = apply_rope_decomposed
+        # rope_func = apply_rope_contrib
         query_states = rope_func(
             x=query_states,
             cos_cache=cos_cache,
@@ -60,6 +62,7 @@ class Attention(nn.Module):
 
         attention_func = attention
         # attention_func = attention_decomposed
+        # attention_func = attention_contrib_mha
         attn_output, present_key, present_value = attention_func(
             query=query_states,
             key=key_states,
@@ -72,6 +75,6 @@ class Attention(nn.Module):
             scale=self.scaling,
         )
 
-        attn_output = attn_output.transpose(1, 2).reshape(*input_shape, -1)
+        attn_output = attn_output.transpose(1, 2).contiguous().reshape(*input_shape, -1)
         attn_output = self.o_proj(attn_output)
         return attn_output, present_key, present_value
