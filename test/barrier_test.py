@@ -23,9 +23,13 @@ class ModelWithDecoratedBarrier(torch.nn.Module):
 class Model(torch.nn.Module):
     def forward(self, x, y, z="default"):
         identifier = _barrier.get_identifier("my_region")
-        x, y = _barrier.barrier_op((x, y), {"z": z}, group_identifier=identifier, type="input")
+        x, y = _barrier.barrier_op(
+            (x, y), {"z": z}, group_identifier=identifier, type="input"
+        )
         result = x * 2 + y
-        result, = _barrier.barrier_op((result,), {"z": z}, group_identifier=identifier, type="output")
+        result = _barrier.barrier_op(
+            (result,), group_identifier=identifier, type="output"
+        )
         return result
 
 
@@ -59,6 +63,7 @@ class BarrierTest(unittest.TestCase):
         nodes = [node.op_type for node in onnx_program.model.graph]
         self.assertEqual(nodes.count("Barrier"), 2)
         onnx_program.save("barrier.onnx")
+
 
 if __name__ == "__main__":
     unittest.main()
