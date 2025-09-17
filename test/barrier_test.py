@@ -2,7 +2,7 @@ import unittest
 
 import torch
 
-from torch_onnx_models.components import _barrier
+from torch_onnx_models import _barrier
 
 
 @_barrier.with_barrier(
