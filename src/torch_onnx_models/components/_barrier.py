@@ -76,12 +76,20 @@ def with_barrier(
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             identifier = get_identifier(func.__name__)
+            metadata_with_attrs = {"__attrs__": kwargs}
+            metadata_with_attrs.update(metadata or {})
             inputs = barrier_op(
-                args, metadata=metadata, group_identifier=identifier, type="input"
+                args,
+                metadata=metadata_with_attrs,
+                group_identifier=identifier,
+                type="input",
             )
             outputs = func(*inputs, **kwargs)
             return barrier_op(
-                outputs, metadata=metadata, group_identifier=identifier, type="output"
+                outputs,
+                metadata=metadata_with_attrs,
+                group_identifier=identifier,
+                type="output",
             )
 
         return wrapper

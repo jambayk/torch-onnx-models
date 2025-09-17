@@ -8,10 +8,10 @@ from torch_onnx_models.components import _barrier
 @_barrier.with_barrier(
     metadata={
         "op": "domain::MyCustomOp",
-        "attributes": {"attr1": 123, "attr2": "value"},
+        "additional_attributes": {"attr1": 123, "attr2": "value"},
     }
 )
-def decorated_func(x, y):
+def decorated_func(x, y, *, z="default"):
     return x * 2 + y
 
 
