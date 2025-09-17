@@ -4,7 +4,7 @@ import functools
 import json
 from collections import Counter
 from collections.abc import Sequence
-from typing import Any, Literal, Optional, TypeVar
+from typing import Any, Literal, TypeVar
 
 import torch
 
@@ -21,7 +21,7 @@ def barrier_op(
     inputs: TOptionalTensorSequence,
     metadata: dict[str, Any] | None = None,
     *,
-    group_identifier: str,
+    region_identifier: str,
     type: Literal["input", "output"],
 ) -> TOptionalTensorSequence:
     # NOTE: inputs can have None values but that makes typing hard. So we don't annotate
@@ -37,7 +37,7 @@ def barrier_op(
         "pkg.torch::Barrier",
         tensors,
         attrs={
-            "group_identifier": group_identifier,
+            "region_identifier": region_identifier,
             "type": type,
             "metadata": json.dumps(metadata),
         },
@@ -81,14 +81,14 @@ def with_barrier(
             inputs = barrier_op(
                 args,
                 metadata=metadata_with_attrs,
-                group_identifier=identifier,
+                region_identifier=identifier,
                 type="input",
             )
             outputs = func(*inputs, **kwargs)
             return barrier_op(
                 outputs,
                 metadata=metadata_with_attrs,
-                group_identifier=identifier,
+                region_identifier=identifier,
                 type="output",
             )
 

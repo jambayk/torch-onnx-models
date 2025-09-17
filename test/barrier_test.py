@@ -24,11 +24,11 @@ class Model(torch.nn.Module):
     def forward(self, x, y, z="default"):
         identifier = _barrier.get_identifier("my_region")
         x, y = _barrier.barrier_op(
-            (x, y), {"z": z}, group_identifier=identifier, type="input"
+            (x, y), {"z": z}, region_identifier=identifier, type="input"
         )
         result = x * 2 + y
         result = _barrier.barrier_op(
-            (result,), group_identifier=identifier, type="output"
+            (result,), region_identifier=identifier, type="output"
         )
         return result
 
