@@ -1,4 +1,6 @@
 test.ipynb
+*.onnx
+*.onnx.data
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

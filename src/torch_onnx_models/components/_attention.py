@@ -2,43 +2,79 @@ from __future__ import annotations
 
 import torch
 from torch import nn
+from argparse import Namespace
+from torch_onnx_models.components._attention_utils import attention, attention_decomposed, attention_contrib_mha
+from torch_onnx_models.components._rotary_embedding_utils import apply_rope, apply_rope_decomposed, apply_rope_contrib
 
 
 class Attention(nn.Module):
 
-    # these init values will later come from the model config
-    def __init__(self, *, hidden_size: int, head_dim: int, num_attention_heads: int, num_key_value_heads: int, merged_qkv: bool = False, attention_bias: bool = False):
+    # replace config typing with actual config class later
+    def __init__(self, config: Namespace):
         super().__init__()
-        self.hidden_size = hidden_size
-        self.head_dim = head_dim
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
+        self.hidden_size = config.hidden_size
+        self.head_dim = config.head_dim
+        self.num_attention_heads = config.num_attention_heads
+        self.num_key_value_heads = config.num_key_value_heads
         # models like gemma have different scaling, generalize later
-        self.scaling = head_dim**-0.5
+        self.scaling = self.head_dim**-0.5
 
-        # make this configurable or not?
-        self.merged_qkv = merged_qkv
-        if self.merged_qkv:
-            self.qkv_proj = nn.Linear(
-                self.hidden_size, (self.num_attention_heads + 2* self.num_key_value_heads) * self.head_dim, bias=attention_bias
-            )
-        else:
-            self.q_proj = nn.Linear(
-                self.hidden_size, self.num_attention_heads * self.head_dim, bias=attention_bias
-            )
-            self.k_proj = nn.Linear(
-                self.hidden_size, self.num_key_value_heads * self.head_dim, bias=attention_bias
-            )
-            self.v_proj = nn.Linear(
-                self.hidden_size, self.num_key_value_heads * self.head_dim, bias=attention_bias
-            )
-        self.o_proj = nn.Linear(
-            self.num_attention_heads * self.head_dim, self.hidden_size, bias=attention_bias
+        self.q_proj = nn.Linear(self.hidden_size, self.num_attention_heads * self.head_dim, bias=config.attention_bias)
+        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
+        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
+        self.o_proj = nn.Linear(self.num_attention_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_bias: torch.Tensor,
+        position_ids: torch.Tensor,
+        cos_cache: torch.Tensor,
+        sin_cache: torch.Tensor,
+        past_key: torch.Tensor | None,
+        past_value: torch.Tensor | None,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_proj(hidden_states).reshape(hidden_shape).transpose(1, 2).contiguous()
+        key_states = self.k_proj(hidden_states).reshape(hidden_shape).transpose(1, 2).contiguous()
+        value_states = self.v_proj(hidden_states).reshape(hidden_shape).transpose(1, 2).contiguous()
+
+        # just for testing
+        rope_func = apply_rope
+        # rope_func = apply_rope_decomposed
+        # rope_func = apply_rope_contrib
+        query_states = rope_func(
+            x=query_states,
+            cos_cache=cos_cache,
+            sin_cache=sin_cache,
+            position_ids=position_ids,
+            num_heads=self.num_attention_heads,
+        )
+        key_states = rope_func(
+            x=key_states,
+            cos_cache=cos_cache,
+            sin_cache=sin_cache,
+            position_ids=position_ids,
+            num_heads=self.num_key_value_heads,
         )
 
-    # def forward(
-    #     self,
-    #     hidden_states: torch.Tensor,
-    #     attention_mask: torch.Tensor,
-    #     causal_mask: torch.Tensor,
-    #     position_ids: torch.Tensor)
+        attention_func = attention
+        # attention_func = attention_decomposed
+        # attention_func = attention_contrib_mha
+        attn_output, present_key, present_value = attention_func(
+            query=query_states,
+            key=key_states,
+            value=value_states,
+            bias=attention_bias,
+            past_key=past_key,
+            past_value=past_value,
+            q_num_heads=self.num_attention_heads,
+            kv_num_heads=self.num_key_value_heads,
+            scale=self.scaling,
+        )
+
+        attn_output = attn_output.transpose(1, 2).contiguous().reshape(*input_shape, -1)
+        attn_output = self.o_proj(attn_output)
+        return attn_output, present_key, present_value
