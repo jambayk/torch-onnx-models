@@ -5,7 +5,12 @@ import torch
 from torch_onnx_models.components import _barrier
 
 
-@_barrier.with_barrier
+@_barrier.with_barrier(
+    metadata={
+        "op": "domain::MyCustomOp",
+        "attributes": {"attr1": 123, "attr2": "value"},
+    }
+)
 def decorated_func(x, y):
     return x * 2 + y
 

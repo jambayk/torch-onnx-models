@@ -5,17 +5,14 @@ import json
 import random
 import string
 from collections.abc import Sequence
-from typing import Literal
+from typing import Any, Literal
 
 import torch
 
 
 def barrier_op(
     inputs: Sequence[torch.Tensor | None] | torch.Tensor,
-    metadata: dict[
-        str, bool | int | float | str | Sequence[int] | Sequence[float] | Sequence[str]
-    ]
-    | None = None,
+    metadata: dict[str, Any] | None = None,
     *,
     group_identifier: str,
     type: Literal["input", "output"],
@@ -54,11 +51,7 @@ def _create_identifier(hint: str) -> str:
 
 
 def with_barrier(
-    func,
-    metadata: dict[
-        str, bool | int | float | str | Sequence[int] | Sequence[float] | Sequence[str]
-    ]
-    | None = None,
+    metadata: dict[str, Any] | None = None,
 ):
     """A decorator for inserting a pair of barriers for a subgraph.
 
@@ -68,15 +61,18 @@ def with_barrier(
         metadata: Metadata for this pair of barrier / subgraph.
     """
 
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        identifier = _create_identifier(func.__name__)
-        inputs = barrier_op(
-            args, metadata=metadata, group_identifier=identifier, type="input"
-        )
-        outputs = func(*inputs, **kwargs)
-        return barrier_op(
-            outputs, metadata=metadata, group_identifier=identifier, type="output"
-        )
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            identifier = _create_identifier(func.__name__)
+            inputs = barrier_op(
+                args, metadata=metadata, group_identifier=identifier, type="input"
+            )
+            outputs = func(*inputs, **kwargs)
+            return barrier_op(
+                outputs, metadata=metadata, group_identifier=identifier, type="output"
+            )
 
-    return wrapper
+        return wrapper
+
+    return decorator
