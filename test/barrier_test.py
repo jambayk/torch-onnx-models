@@ -1,3 +1,4 @@
+import json
 import unittest
 
 import torch
@@ -62,7 +63,11 @@ class BarrierTest(unittest.TestCase):
         )
         nodes = [node.op_type for node in onnx_program.model.graph]
         self.assertEqual(nodes.count("Barrier"), 2)
-        onnx_program.save("barrier.onnx")
+        barrier_node = next(
+            node for node in onnx_program.model.graph if node.op_type == "Barrier"
+        )
+        attributes = _barrier.get_attrs(barrier_node)
+        self.assertEqual(attributes, {"z": "default"})
 
 
 if __name__ == "__main__":
