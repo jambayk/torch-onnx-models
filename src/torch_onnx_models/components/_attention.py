@@ -76,6 +76,6 @@ class Attention(nn.Module):
             scale=self.scaling,
         )
 
-        attn_output = attn_output.reshape(*input_shape, -1)
+        attn_output = attn_output.transpose(1, 2).reshape(*input_shape, -1)
         attn_output = self.o_proj(attn_output)
         return attn_output, present_key, present_value
