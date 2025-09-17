@@ -1,6 +1,7 @@
 import unittest
 
 import torch
+
 from torch_onnx_models.components import _barrier
 
 

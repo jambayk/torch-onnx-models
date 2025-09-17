@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
 import functools
 import json
-from typing import Literal
 import random
 import string
-
+from collections.abc import Sequence
+from typing import Literal
 
 import torch
 
