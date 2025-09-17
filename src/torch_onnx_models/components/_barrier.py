@@ -2,52 +2,63 @@ from __future__ import annotations
 
 import functools
 import json
-import random
-import string
+from collections import Counter
 from collections.abc import Sequence
-from typing import Any, Literal
+from typing import Any, Literal, Optional, TypeVar
 
 import torch
 
+COUNTER = Counter()
+
+TOptionalTensorSequence = TypeVar(
+    "TOptionalTensorSequence",
+    tuple[torch.Tensor, ...],
+    torch.Tensor,
+)
+
 
 def barrier_op(
-    inputs: Sequence[torch.Tensor | None] | torch.Tensor,
+    inputs: TOptionalTensorSequence,
     metadata: dict[str, Any] | None = None,
     *,
     group_identifier: str,
     type: Literal["input", "output"],
-) -> Sequence[torch.Tensor | None]:
+) -> TOptionalTensorSequence:
+    # NOTE: inputs can have None values but that makes typing hard. So we don't annotate
     if metadata is None:
         metadata = {}
 
-    if isinstance(inputs, torch.Tensor):
-        inputs = (inputs,)
+    if isinstance(inputs, torch.Tensor) or inputs is None:
+        tensors = (inputs,)
+    else:
+        tensors = inputs
 
-    outputs = torch.onnx.ops.symbolic_multi_out(
+    outputs: Sequence[torch.Tensor] = torch.onnx.ops.symbolic_multi_out(
         "pkg.torch::Barrier",
-        inputs,
+        tensors,
         attrs={
             "group_identifier": group_identifier,
             "type": type,
             "metadata": json.dumps(metadata),
         },
-        dtypes=[0 if t is None else t.dtype for t in inputs],
-        shapes=[[] if t is None else t.shape for t in inputs],
+        dtypes=[0 if t is None else t.dtype for t in tensors],
+        shapes=[[] if t is None else t.shape for t in tensors],
         version=1,
     )
-    return [
-        output if input is not None else None for output, input in zip(outputs, inputs)
+    result = [
+        output if input is not None else None for output, input in zip(outputs, tensors)
     ]
+    if len(result) == 1:
+        return result[0]
+    return result
 
 
-def _create_identifier(hint: str) -> str:
-    length = 8
-    random_string = "".join(
-        random.choices(string.ascii_letters + string.digits, k=length)
-    )
+def get_identifier(hint: str) -> str:
     if not hint:
-        hint = "anonymous_func"
-    return f"{hint}_{random_string}"
+        hint = "anonymous_region"
+    count = COUNTER[hint]
+    COUNTER[hint] += 1
+    return f"{hint}_{count}"
 
 
 def with_barrier(
@@ -64,7 +75,7 @@ def with_barrier(
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            identifier = _create_identifier(func.__name__)
+            identifier = get_identifier(func.__name__)
             inputs = barrier_op(
                 args, metadata=metadata, group_identifier=identifier, type="input"
             )
