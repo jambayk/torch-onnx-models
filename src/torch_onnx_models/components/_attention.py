@@ -3,8 +3,8 @@ from __future__ import annotations
 import torch
 from torch import nn
 from argparse import Namespace
-from torch_onnx_models.components._attention_utils import attention, attention_contrib_mha
-from torch_onnx_models.components._rotary_embedding_utils import apply_rope
+from torch_onnx_models.components._attention_utils import attention, attention_decomposed
+from torch_onnx_models.components._rotary_embedding_utils import apply_rope, apply_rope_decomposed
 
 
 class Attention(nn.Module):
@@ -40,23 +40,17 @@ class Attention(nn.Module):
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        # print("query_states", query_states.shape)
-        # print("key_states", key_states.shape)
-        # print("value_states", value_states.shape)
-        # print("attention_bias", attention_bias.shape)
-        # print("position_ids", position_ids.shape)
-        # print("cos_cache", cos_cache.shape)
-        # print("sin_cache", sin_cache.shape)
-        # print("past_key", None if past_key is None else past_key.shape)
-        # print("past_value", None if past_value is None else past_value.shape)
-        query_states = apply_rope(
+        # just for testing
+        rope_func = apply_rope
+        # rope_func = apply_rope_decomposed
+        query_states = rope_func(
             x=query_states,
             cos_cache=cos_cache,
             sin_cache=sin_cache,
             position_ids=position_ids,
             num_heads=self.num_attention_heads,
         )
-        key_states = apply_rope(
+        key_states = rope_func(
             x=key_states,
             cos_cache=cos_cache,
             sin_cache=sin_cache,
@@ -64,7 +58,9 @@ class Attention(nn.Module):
             num_heads=self.num_key_value_heads,
         )
 
-        attn_output, present_key, present_value = attention(
+        attention_func = attention
+        # attention_func = attention_decomposed
+        attn_output, present_key, present_value = attention_func(
             query=query_states,
             key=key_states,
             value=value_states,

@@ -51,13 +51,6 @@ def apply_rope(
     return x.view(batch_size, seq_length, num_heads, head_dim).permute(0, 2, 1, 3)
 
 
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
 def apply_rope_decomposed(
     *,
     x: torch.Tensor,
@@ -75,11 +68,11 @@ def apply_rope_decomposed(
 
     Args:
         x (torch.Tensor): The input tensor of shape (batch_size, num_heads, seq_length, head_dim).
-        cos_cache (torch.Tensor): The cosine cache tensor of shape (max_position_embeddings, head_dim).
-        sin_cache (torch.Tensor): The sine cache tensor of shape (max_position_embeddings, head_dim).
+        cos_cache (torch.Tensor): The cosine cache tensor of shape (max_position_embeddings, rotary_embedding_dim // 2).
+        sin_cache (torch.Tensor): The sine cache tensor of shape (max_position_embeddings, rotary_embedding_dim // 2).
         position_ids (torch.Tensor): The position IDs tensor of shape (batch_size, seq_length).
         num_heads (int): The number of attention heads.
-        rotary_embedding_dim (int): The dimension of the rotary embeddings for partial embedding (default is 0, meaning full embedding).
+        rotary_embedding_dim (int): The dimension of the rotary embeddings for partial embedding (default is 0 equivalent to head_dim, meaning full embedding).
 
     Returns:
         torch.Tensor: The transformed hidden states with RoPE applied, of the same shape as input.
@@ -93,7 +86,14 @@ def apply_rope_decomposed(
     cos = cos_cache[position_ids].unsqueeze(1)
     sin = sin_cache[position_ids].unsqueeze(1)
 
-    x_applied = (x_rot * cos) + (rotate_half(x_rot) * sin)
+    x_even = x_rot[..., 0::2]
+    x_odd = x_rot[..., 1::2]
+
+    real = x_even * cos - x_odd * sin
+    imag = x_even * sin + x_odd * cos
+
+    x_applied = torch.cat((real, imag), dim=-1)
+
     if x_pass is not None:
         return torch.cat([x_applied, x_pass], dim=-1)
 

@@ -31,6 +31,8 @@ def create_attention_bias(
     return torch.where(full_mask, 0.0, mask_value)[:, None, :, :]
 
 
+# TODO(jambayk): add doc strings for shape of outputs
+# should we make scale optional? maybe not since it requires us to get the head_dim from the input shape
 def attention(
     *,
     query: torch.Tensor,
@@ -41,7 +43,7 @@ def attention(
     past_value: torch.Tensor | None = None,
     q_num_heads: int,
     kv_num_heads: int,
-    scale: float | None = None,
+    scale: float,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Perform attention operation using ONNX Attention operator
@@ -55,7 +57,7 @@ def attention(
         past_value (torch.Tensor | None): The past value tensor for caching (optional).
         q_num_heads (int): The number of query attention heads.
         kv_num_heads (int): The number of key-value heads.
-        scale (float | None): The scaling factor for the attention scores (optional).
+        scale (float): The scaling factor for the attention scores.
 
     Returns:
         tuple[torch.Tensor, torch.Tensor, torch.Tensor]: A tuple containing the attention output, present key, and present value.
@@ -76,7 +78,7 @@ def attention_decomposed(
     past_value: torch.Tensor | None = None,
     q_num_heads: int,
     kv_num_heads: int,
-    scale: float | None = None,
+    scale: float,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Perform attention operation using ONNX Attention operator
@@ -90,7 +92,7 @@ def attention_decomposed(
         past_value (torch.Tensor | None): The past value tensor for caching (optional).
         q_num_heads (int): The number of query attention heads.
         kv_num_heads (int): The number of key-value heads.
-        scale (float | None): The scaling factor for the attention scores (optional).
+        scale (float): The scaling factor for the attention scores.
 
     Returns:
         tuple[torch.Tensor, torch.Tensor, torch.Tensor]: A tuple containing the attention output, present key, and present value.
@@ -100,9 +102,17 @@ def attention_decomposed(
         key = torch.cat([past_key, key], dim=2)
         value = torch.cat([past_value, value], dim=2)
 
-    return torch.nn.functional.scaled_dot_product_attention(
-        query, key, value, attn_mask=bias, scale=scale, enable_gqa=q_num_heads != kv_num_heads
-    )[:3]
+    # cannot use scaled_dot_product_attention since it gets exported as the attention op when opset >= 23
+    if q_num_heads != kv_num_heads:
+        key = key.repeat_interleave(q_num_heads // kv_num_heads, dim=1)
+        value = value.repeat_interleave(q_num_heads // kv_num_heads, dim=1)
+
+    attn_weight = torch.matmul(query, key.transpose(2, 3)) * scale
+    attn_weight = attn_weight + bias
+
+    attn_weights = nn.functional.softmax(attn_weight, dim=-1)
+    attn_output = torch.matmul(attn_weights, value)
+    return attn_output, key, value
 
 
 def attention_contrib_mha(
@@ -115,7 +125,7 @@ def attention_contrib_mha(
     past_value: torch.Tensor | None = None,
     q_num_heads: int,
     kv_num_heads: int,
-    scale: float | None = None,
+    scale: float,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Perform attention operation using ONNX Attention operator
@@ -129,7 +139,7 @@ def attention_contrib_mha(
         past_value (torch.Tensor | None): The past value tensor for caching (optional).
         q_num_heads (int): The number of query attention heads.
         kv_num_heads (int): The number of key-value heads.
-        scale (float | None): The scaling factor for the attention scores (optional).
+        scale (float): The scaling factor for the attention scores.
 
     Returns:
         tuple[torch.Tensor, torch.Tensor, torch.Tensor]: A tuple containing the attention output, present key, and present value.
