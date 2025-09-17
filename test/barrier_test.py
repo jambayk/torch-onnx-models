@@ -1,8 +1,9 @@
+import json
 import unittest
 
 import torch
 
-from torch_onnx_models.components import _barrier
+from torch_onnx_models import _barrier
 
 
 @_barrier.with_barrier(
@@ -24,11 +25,11 @@ class Model(torch.nn.Module):
     def forward(self, x, y, z="default"):
         identifier = _barrier.get_identifier("my_region")
         x, y = _barrier.barrier_op(
-            (x, y), {"z": z}, group_identifier=identifier, type="input"
+            (x, y), {"z": z}, region_identifier=identifier, type="input"
         )
         result = x * 2 + y
         result = _barrier.barrier_op(
-            (result,), group_identifier=identifier, type="output"
+            (result,), region_identifier=identifier, type="output"
         )
         return result
 
@@ -62,7 +63,11 @@ class BarrierTest(unittest.TestCase):
         )
         nodes = [node.op_type for node in onnx_program.model.graph]
         self.assertEqual(nodes.count("Barrier"), 2)
-        onnx_program.save("barrier.onnx")
+        barrier_node = next(
+            node for node in onnx_program.model.graph if node.op_type == "Barrier"
+        )
+        attributes = _barrier.get_attrs(barrier_node)
+        self.assertEqual(attributes, {"z": "default"})
 
 
 if __name__ == "__main__":
