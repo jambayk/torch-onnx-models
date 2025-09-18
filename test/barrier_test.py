@@ -3,6 +3,7 @@ import unittest
 import torch
 
 from torch_onnx_models import _barrier
+from torch_onnx_models.components import _activations
 
 
 @_barrier.with_barrier(
@@ -40,11 +41,7 @@ class BarrierTest(unittest.TestCase):
         x = torch.randn(2, 3)
         y = torch.randn(2, 3)
 
-        onnx_program = torch.onnx.export(
-            model,
-            (x, y),
-            dynamo=True,
-        )
+        onnx_program = torch.onnx.export(model, (x, y), dynamo=True, verbose=False)
         nodes = [node.op_type for node in onnx_program.model.graph]
         self.assertEqual(nodes.count("Barrier"), 2)
         onnx_program.save("barrier_decorator.onnx")
@@ -55,11 +52,7 @@ class BarrierTest(unittest.TestCase):
         x = torch.randn(2, 3)
         y = torch.randn(2, 3)
 
-        onnx_program = torch.onnx.export(
-            model,
-            (x, y),
-            dynamo=True,
-        )
+        onnx_program = torch.onnx.export(model, (x, y), dynamo=True, verbose=False)
         nodes = [node.op_type for node in onnx_program.model.graph]
         self.assertEqual(nodes.count("Barrier"), 2)
         barrier_node = next(
@@ -67,6 +60,24 @@ class BarrierTest(unittest.TestCase):
         )
         attributes = _barrier.get_attrs(barrier_node)
         self.assertEqual(attributes, {"z": "default"})
+
+    def test_quick_gelu(self):
+        model = _activations.QuickGELUActivation()
+        x = torch.randn(2, 3)
+        onnx_program = torch.onnx.export(model, (x,), dynamo=True, verbose=False)
+        print(onnx_program.model)
+        barrier_node = next(
+            node for node in onnx_program.model.graph if node.op_type == "Barrier"
+        )
+        attributes = _barrier.get_attrs(barrier_node)
+        self.assertEqual(attributes, {})
+        metadata = _barrier.get_metadata(barrier_node)
+        self.assertEqual(
+            metadata,
+            {
+                "region": "quick_gelu",
+            },
+        )
 
 
 if __name__ == "__main__":
