@@ -72,12 +72,7 @@ class BarrierTest(unittest.TestCase):
         attributes = _barrier.get_attrs(barrier_node)
         self.assertEqual(attributes, {})
         metadata = _barrier.get_metadata(barrier_node)
-        self.assertEqual(
-            metadata,
-            {
-                "region": "quick_gelu",
-            },
-        )
+        self.assertEqual(metadata, {"region": "quick_gelu"})
 
 
 if __name__ == "__main__":
