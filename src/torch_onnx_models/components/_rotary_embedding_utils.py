@@ -28,11 +28,11 @@ def apply_rope(
 
     Args:
         x (torch.Tensor): The input tensor of shape (batch_size, seq_length, num_heads * head_dim).
-        cos_cache (torch.Tensor): The cosine cache tensor of shape (max_position_embeddings, head_dim).
-        sin_cache (torch.Tensor): The sine cache tensor of shape (max_position_embeddings, head_dim).
+        cos_cache (torch.Tensor): The cosine cache tensor of shape (max_position_embeddings, rotary_embedding_dim // 2).
+        sin_cache (torch.Tensor): The sine cache tensor of shape (max_position_embeddings, rotary_embedding_dim // 2).
         position_ids (torch.Tensor): The position IDs tensor of shape (batch_size, seq_length).
         num_heads (int): The number of attention heads.
-        rotary_embedding_dim (int): The dimension of the rotary embeddings for partial embedding (default is 0, meaning full embedding).
+        rotary_embedding_dim (int): The dimension of the rotary embeddings for partial embedding (default is 0 equivalent to head_dim, meaning full embedding).
 
     Returns:
         torch.Tensor: The transformed hidden states with RoPE applied, of the same shape as input.
@@ -120,7 +120,7 @@ def apply_rope_contrib(
         sin_cache (torch.Tensor): The sine cache tensor of shape (max_position_embeddings, head_dim).
         position_ids (torch.Tensor): The position IDs tensor of shape (batch_size, seq_length).
         num_heads (int): The number of attention heads.
-        rotary_embedding_dim (int): The dimension of the rotary embeddings for partial embedding (default is 0, meaning full embedding).
+        rotary_embedding_dim (int): The dimension of the rotary embeddings for partial embedding (default is 0 equivalent to head_dim, meaning full embedding).
 
     Returns:
         torch.Tensor: The transformed hidden states with RoPE applied, of the same shape as input.
