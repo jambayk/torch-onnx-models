@@ -184,6 +184,8 @@ def attention_contrib_mha(
     Returns:
         tuple[torch.Tensor, torch.Tensor, torch.Tensor]: A tuple containing the attention output, present key, and present value.
     """
+    batch_size, _, seq_length, _ = query.shape
+    query = query.transpose(1, 2).contiguous().reshape(batch_size, seq_length, -1)
     key, value, present_key, present_value = _prepare_kv_mha(
         key=key,
         value=value,
@@ -199,11 +201,12 @@ def attention_contrib_mha(
             [query, key, value, None, None, bias],
             attrs={"num_heads": q_num_heads, "scale": scale},
             dtype=value.dtype,
-            # need to check what the correct shape is here
-            # same shape as value or (batch_size, seq_length, q_num_heads * v_head_size)?
-            shape=(query.shape[0], q_num_heads, query.shape[2], value.shape[-1]),
+            shape=(batch_size, seq_length, q_num_heads * value.shape[-1]),
             version=1,
-        ),
+        )
+        .reshape(batch_size, seq_length, q_num_heads, -1)
+        .transpose(1, 2)
+        .contiguous(),
         present_key,
         present_value,
     )
