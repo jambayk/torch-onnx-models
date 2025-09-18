@@ -34,12 +34,9 @@ class Attention(nn.Module):
         past_key: torch.Tensor | None,
         past_value: torch.Tensor | None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
-
-        query_states = self.q_proj(hidden_states).reshape(hidden_shape).transpose(1, 2).contiguous()
-        key_states = self.k_proj(hidden_states).reshape(hidden_shape).transpose(1, 2).contiguous()
-        value_states = self.v_proj(hidden_states).reshape(hidden_shape).transpose(1, 2).contiguous()
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
 
         # just for testing
         rope_func = apply_rope
@@ -77,6 +74,5 @@ class Attention(nn.Module):
             scale=self.scaling,
         )
 
-        attn_output = attn_output.transpose(1, 2).contiguous().reshape(*input_shape, -1)
         attn_output = self.o_proj(attn_output)
         return attn_output, present_key, present_value
