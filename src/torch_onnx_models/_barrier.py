@@ -75,7 +75,7 @@ def barrier_op(
     result = [
         output if input is not None else None for output, input in zip(outputs, tensors)
     ]
-    if len(result) == 1:
+    if len(result) == 1 and not isinstance(inputs, Sequence):
         return result[0]
     return result
 
@@ -141,3 +141,14 @@ def get_attrs(node: ir.Node) -> dict[str, Any]:
     if not attrs_str:
         return {}
     return json.loads(attrs_str)
+
+
+def get_metadata(node: ir.Node) -> dict[str, Any]:
+    """Obtain the metadata dictionary from a Barrier node."""
+    if node.op_type != "Barrier":
+        raise ValueError(f"Node is not a Barrier: {node}")
+
+    metadata_str = node.attributes.get_string("metadata")
+    if not metadata_str:
+        return {}
+    return json.loads(metadata_str)
