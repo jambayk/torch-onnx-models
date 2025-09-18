@@ -45,6 +45,7 @@ class Attention(nn.Module):
         rope_func = apply_rope
         # rope_func = apply_rope_decomposed
         # rope_func = apply_rope_contrib
+        print("Using rope func:", rope_func.__name__)
         query_states = rope_func(
             x=query_states,
             cos_cache=cos_cache,
@@ -63,6 +64,7 @@ class Attention(nn.Module):
         attention_func = attention
         # attention_func = attention_decomposed
         # attention_func = attention_contrib_mha
+        print("Using attention func:", attention_func.__name__)
         attn_output, present_key, present_value = attention_func(
             query=query_states,
             key=key_states,

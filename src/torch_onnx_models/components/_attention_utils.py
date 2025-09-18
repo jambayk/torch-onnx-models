@@ -73,6 +73,42 @@ def attention(
     return attn_output, present_key, present_value
 
 
+def _prepare_kv_mha(
+    *,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    past_key: torch.Tensor | None = None,
+    past_value: torch.Tensor | None = None,
+    q_num_heads: int,
+    kv_num_heads: int,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """
+    Prepare key and value tensors for Multi-Head Attention (MHA) operation.
+
+    Args:
+        key (torch.Tensor): The key tensor.
+        value (torch.Tensor): The value tensor.
+        past_key (torch.Tensor | None): The past key tensor for caching (optional).
+        past_value (torch.Tensor | None): The past value tensor for caching (optional).
+        q_num_heads (int): The number of query attention heads.
+        kv_num_heads (int): The number of key-value heads.
+
+    Returns:
+        tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]: A tuple containing the prepared key, value, present key, and present value tensors.
+    """
+    # TODO(jambayk): put some guidance that there should not be data-dependent conditionals in general but None checks are ok
+    if past_key is not None and past_value is not None:
+        key = torch.cat([past_key, key], dim=2)
+        value = torch.cat([past_value, value], dim=2)
+    present_key = key
+    present_value = value
+
+    if q_num_heads != kv_num_heads:
+        key = key.repeat_interleave(q_num_heads // kv_num_heads, dim=1)
+        value = value.repeat_interleave(q_num_heads // kv_num_heads, dim=1)
+    return key, value, present_key, present_value
+
+
 def attention_decomposed(
     *,
     query: torch.Tensor,
@@ -102,22 +138,21 @@ def attention_decomposed(
     Returns:
         tuple[torch.Tensor, torch.Tensor, torch.Tensor]: A tuple containing the attention output, present key, and present value.
     """
-    # TODO(jambayk): put some guidance that there should not be data-dependent conditionals in general but None checks are ok
-    if past_key is not None and past_value is not None:
-        key = torch.cat([past_key, key], dim=2)
-        value = torch.cat([past_value, value], dim=2)
-
-    # cannot use scaled_dot_product_attention since it gets exported as the attention op when opset >= 23
-    if q_num_heads != kv_num_heads:
-        key = key.repeat_interleave(q_num_heads // kv_num_heads, dim=1)
-        value = value.repeat_interleave(q_num_heads // kv_num_heads, dim=1)
+    key, value, present_key, present_value = _prepare_kv_mha(
+        key=key,
+        value=value,
+        past_key=past_key,
+        past_value=past_value,
+        q_num_heads=q_num_heads,
+        kv_num_heads=kv_num_heads,
+    )
 
     attn_weight = torch.matmul(query, key.transpose(2, 3)) * scale
     attn_weight = attn_weight + bias
 
     attn_weights = nn.functional.softmax(attn_weight, dim=-1)
     attn_output = torch.matmul(attn_weights, value)
-    return attn_output, key, value
+    return attn_output, present_key, present_value
 
 
 def attention_contrib_mha(
@@ -149,15 +184,14 @@ def attention_contrib_mha(
     Returns:
         tuple[torch.Tensor, torch.Tensor, torch.Tensor]: A tuple containing the attention output, present key, and present value.
     """
-    original_v_shape = value.shape
-    # TODO(jambayk): put some guidance that conditions on scalar attributes are ok
-    if past_key is not None and past_value is not None:
-        key = torch.cat([past_key, key], dim=2)
-        value = torch.cat([past_value, value], dim=2)
-
-    if q_num_heads != kv_num_heads:
-        key = key.repeat_interleave(q_num_heads // kv_num_heads, dim=1)
-        value = value.repeat_interleave(q_num_heads // kv_num_heads, dim=1)
+    key, value, present_key, present_value = _prepare_kv_mha(
+        key=key,
+        value=value,
+        past_key=past_key,
+        past_value=past_value,
+        q_num_heads=q_num_heads,
+        kv_num_heads=kv_num_heads,
+    )
 
     return (
         torch.onnx.ops.symbolic(
@@ -166,10 +200,10 @@ def attention_contrib_mha(
             attrs={"num_heads": q_num_heads, "scale": scale},
             dtype=value.dtype,
             # need to check what the correct shape is here
-            # same shape as value or (batch_size, seq_length, kv_num_heads * v_head_size)?
-            shape=original_v_shape,
+            # same shape as value or (batch_size, seq_length, q_num_heads * v_head_size)?
+            shape=(query.shape[0], q_num_heads, query.shape[2], value.shape[-1]),
             version=1,
         ),
-        key,
-        value,
+        present_key,
+        present_value,
     )
