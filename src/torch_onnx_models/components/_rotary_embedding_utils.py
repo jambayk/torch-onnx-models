@@ -27,7 +27,7 @@ def apply_rope(
     using the provided cosine and sine caches based on the given position IDs.
 
     Args:
-        x (torch.Tensor): The input tensor of shape (batch_size, num_heads, seq_length, head_dim).
+        x (torch.Tensor): The input tensor of shape (batch_size, seq_length, num_heads * head_dim).
         cos_cache (torch.Tensor): The cosine cache tensor of shape (max_position_embeddings, head_dim).
         sin_cache (torch.Tensor): The sine cache tensor of shape (max_position_embeddings, head_dim).
         position_ids (torch.Tensor): The position IDs tensor of shape (batch_size, seq_length).
@@ -37,11 +37,7 @@ def apply_rope(
     Returns:
         torch.Tensor: The transformed hidden states with RoPE applied, of the same shape as input.
     """
-    batch_size, _, seq_length, head_dim = x.shape
-    # there is a bug in the implementation of the torch.onnx.ops.rotary_embedding
-    # reshape to 3D shape (batch_size, seq_length, num_heads * head_dim)
-    x = x.transpose(1, 2).contiguous().reshape(batch_size, seq_length, num_heads * head_dim)
-    x = torch.onnx.ops.rotary_embedding(
+    return torch.onnx.ops.rotary_embedding(
         x,
         cos_cache,
         sin_cache,
@@ -49,7 +45,6 @@ def apply_rope(
         rotary_embedding_dim=rotary_embedding_dim,
         num_heads=num_heads,
     )
-    return x.reshape(batch_size, seq_length, num_heads, head_dim).transpose(1, 2).contiguous()
 
 
 def apply_rope_decomposed(
@@ -68,7 +63,7 @@ def apply_rope_decomposed(
     using the provided cosine and sine caches based on the given position IDs.
 
     Args:
-        x (torch.Tensor): The input tensor of shape (batch_size, num_heads, seq_length, head_dim).
+        x (torch.Tensor): The input tensor of shape (batch_size, seq_length, num_heads * head_dim).
         cos_cache (torch.Tensor): The cosine cache tensor of shape (max_position_embeddings, rotary_embedding_dim // 2).
         sin_cache (torch.Tensor): The sine cache tensor of shape (max_position_embeddings, rotary_embedding_dim // 2).
         position_ids (torch.Tensor): The position IDs tensor of shape (batch_size, seq_length).
@@ -78,16 +73,18 @@ def apply_rope_decomposed(
     Returns:
         torch.Tensor: The transformed hidden states with RoPE applied, of the same shape as input.
     """
+    batch_size, seq_length, _ = x.shape
+    x = x.reshape(batch_size, seq_length, num_heads, -1)
     # doing conditionals so that the graph is cleaner when rotary_embedding_dim is 0
     if rotary_embedding_dim == 0:
         x_rot, x_pass = x, None
     else:
         x_rot, x_pass = x[..., :rotary_embedding_dim], x[..., rotary_embedding_dim:]
 
-    cos = cos_cache[position_ids].unsqueeze(1)
-    sin = sin_cache[position_ids].unsqueeze(1)
+    cos = cos_cache[position_ids].unsqueeze(2)
+    sin = sin_cache[position_ids].unsqueeze(2)
 
-    x1, x2 = torch.chunk(x_rot, 2, dim=-1)
+    x1, x2 = x_rot.chunk(2, dim=-1)
 
     real = cos * x1 - sin * x2
     imag = sin * x1 + cos * x2
@@ -97,7 +94,7 @@ def apply_rope_decomposed(
     if x_pass is not None:
         return torch.cat([x_applied, x_pass], dim=-1)
 
-    return x_applied
+    return x_applied.reshape(batch_size, seq_length, -1)
 
 
 def apply_rope_contrib(
@@ -116,7 +113,7 @@ def apply_rope_contrib(
     using the provided cosine and sine caches based on the given position IDs.
 
     Args:
-        x (torch.Tensor): The input tensor of shape (batch_size, num_heads, seq_length, head_dim).
+        x (torch.Tensor): The input tensor of shape (batch_size, seq_length, num_heads * head_dim).
         cos_cache (torch.Tensor): The cosine cache tensor of shape (max_position_embeddings, head_dim).
         sin_cache (torch.Tensor): The sine cache tensor of shape (max_position_embeddings, head_dim).
         position_ids (torch.Tensor): The position IDs tensor of shape (batch_size, seq_length).
