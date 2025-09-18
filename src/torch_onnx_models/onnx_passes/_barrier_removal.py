@@ -11,8 +11,8 @@ def _pop_node(node: ir.Node) -> None:
             "Can only pop nodes with the same number of inputs and outputs"
         )
 
-    inputs = list(node.inputs)
-    outputs = list(node.outputs)
+    inputs = tuple(node.inputs)
+    outputs = tuple(node.outputs)
 
     ir_convenience.replace_all_uses_with(outputs, inputs)
 
@@ -25,7 +25,9 @@ def _pop_node(node: ir.Node) -> None:
     if any(out.is_graph_output() for out in node.outputs):
         for idx, graph_output in enumerate(graph.outputs):
             if graph_output in replacement_mapping:
-                graph.outputs[idx] = replacement_mapping[graph_output]
+                replacement_output = replacement_mapping[graph_output]
+                assert replacement_output is not None
+                graph.outputs[idx] = replacement_output
 
     # Finally remove the node
     graph.remove(node, safe=True)
