@@ -11,13 +11,8 @@ def _pop_node(node: ir.Node) -> None:
             "Can only pop nodes with the same number of inputs and outputs"
         )
 
-    # Filter out any None inputs
-    inputs = []
-    outputs = []
-    for inp, out in zip(node.inputs, node.outputs):
-        if inp is not None:
-            inputs.append(inp)
-            outputs.append(out)
+    inputs = list(node.inputs)
+    outputs = list(node.outputs)
 
     ir_convenience.replace_all_uses_with(outputs, inputs)
 
