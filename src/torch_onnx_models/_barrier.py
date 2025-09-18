@@ -56,7 +56,7 @@ def barrier_op(
         tensors = inputs
 
     outputs: Sequence[torch.Tensor] = torch.onnx.ops.symbolic_multi_out(
-        "pkg.torch::Barrier",
+        "pkg.olive::Barrier",
         tensors,
         attrs={
             "region_identifier": region_identifier,
@@ -130,7 +130,7 @@ def with_barrier(
 
 def get_attrs(node: ir.Node) -> dict[str, Any]:
     """Obtain the attributes dictionary from a Barrier node."""
-    if node.op_type != "Barrier" and node.domain != "pkg.torch":
+    if node.op_type != "Barrier":
         raise ValueError(f"Node is not a Barrier: {node}")
 
     attrs_str = node.attributes.get_string("attributes")
