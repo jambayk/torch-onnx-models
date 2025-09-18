@@ -6,13 +6,13 @@ import onnx_ir.convenience as ir_convenience
 
 def _pop_node(node: ir.Node) -> None:
     """Remove a node from the graph, reconnecting its inputs to its outputs."""
-    if len(node.inputs) != len(node.outputs):
-        raise ValueError(
-            "Can only pop nodes with the same number of inputs and outputs"
-        )
-
     inputs = tuple(node.inputs)
     outputs = tuple(node.outputs)
+
+    if len(inputs) != len(outputs):
+        raise ValueError(
+            f"Can only pop nodes with the same number of inputs and outputs: {node}"
+        )
 
     ir_convenience.replace_all_uses_with(outputs, inputs)
 
