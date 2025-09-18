@@ -10,6 +10,7 @@ def initialize_rope_freqs(
     return torch.rand(max_position_embeddings, dim), torch.rand(max_position_embeddings, dim)
 
 
+# TODO(jambayk): add support for interleaved format if needed
 def apply_rope(
     *,
     x: torch.Tensor,
@@ -86,11 +87,10 @@ def apply_rope_decomposed(
     cos = cos_cache[position_ids].unsqueeze(1)
     sin = sin_cache[position_ids].unsqueeze(1)
 
-    x_even = x_rot[..., 0::2]
-    x_odd = x_rot[..., 1::2]
+    x1, x2 = torch.chunk(x_rot, 2, dim=-1)
 
-    real = x_even * cos - x_odd * sin
-    imag = x_even * sin + x_odd * cos
+    real = cos * x1 - sin * x2
+    imag = sin * x1 + cos * x2
 
     x_applied = torch.cat((real, imag), dim=-1)
 
