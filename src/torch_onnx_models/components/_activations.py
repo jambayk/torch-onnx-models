@@ -22,7 +22,7 @@ from collections import OrderedDict
 import torch
 from torch import Tensor, nn
 
-from torch_onnx_models import _global_configs
+from torch_onnx_models import _barrier
 
 logger = logging.getLogger(__name__)
 
@@ -52,21 +52,37 @@ class GELUActivation(nn.Module):
         return nn.functional.gelu(input)
 
 
+@_barrier.with_barrier(
+    {
+        "region": "quick_gelu",
+    }
+)
+def quick_gelu(input: Tensor) -> Tensor:
+    return input * torch.sigmoid(1.702 * input)
+
+
+@_barrier.with_barrier(
+    {
+        "region": "quick_gelu",
+    }
+)
+def quick_gelu_msft(input: Tensor) -> Tensor:
+    return torch.onnx.ops.symbolic(
+        "com.microsoft::QuickGelu",
+        [input],
+        dtype=input.dtype,
+        shape=input.shape,
+        version=1,
+    )
+
+
 class QuickGELUActivation(nn.Module):
     """
     Applies GELU approximation that is fast but somewhat inaccurate. See: https://github.com/hendrycks/GELUs
     """
 
     def forward(self, input: Tensor) -> Tensor:
-        if torch.onnx.is_in_onnx_export() and _global_configs.target == "ort":
-            return torch.onnx.ops.symbolic(
-                "com.microsoft::QuickGelu",
-                [input],
-                dtype=input.dtype,
-                shape=input.shape,
-                version=1,
-            )
-        return input * torch.sigmoid(1.702 * input)
+        return quick_gelu(input)
 
 
 class ClippedGELUActivation(nn.Module):
