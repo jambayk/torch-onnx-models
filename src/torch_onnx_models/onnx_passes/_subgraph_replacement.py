@@ -18,7 +18,7 @@ def _assert_shapes_match(values1: Sequence[ir.Value], values2: Sequence[ir.Value
 
 
 def replace_subgraph(
-    graph: ir.Graph,
+    model: ir.Model,
     inputs: Sequence[ir.Value],
     outputs: Sequence[ir.Value],
     replacement: ir.Graph,
@@ -27,11 +27,11 @@ def replace_subgraph(
     """Replace a subgraph defined by inputs and outputs with another graph.
 
     Args:
-        graph: The graph to modify.
+        model: The model that contains the graph to modify.
         inputs: The input values to the subgraph to replace.
         outputs: The output values from the subgraph to replace.
         replacement: The graph to insert in place of the subgraph.
-        cleanup: Whether to run cleanup passes after replacement.
+        cleanup: Whether to remove the replaced nodes and reconcile conflicts after replacement.
     """
     if replacement.initializers:
         raise ValueError("Replacement graph cannot have initializers")
@@ -57,7 +57,7 @@ def replace_subgraph(
 
     # Then make all original consumers to use the new outputs
     ir_convenience.replace_nodes_and_values(
-        graph,
+        model.graph,
         insertion_point,
         (),
         new_nodes,
@@ -69,8 +69,7 @@ def replace_subgraph(
         return
 
     # Clean up any nodes that are now dead and reconcile conflicts
-    container_model = ir.Model(graph, ir_version=10)
-    common_passes.RemoveUnusedNodesPass()(container_model)
-    _collect_opsets.CollectOpsetsPass()(container_model)
-    common_passes.RemoveUnusedOpsetsPass()(container_model)
-    common_passes.NameFixPass()(container_model)
+    common_passes.RemoveUnusedNodesPass()(model)
+    _collect_opsets.CollectOpsetsPass()(model)
+    common_passes.RemoveUnusedOpsetsPass()(model)
+    common_passes.NameFixPass()(model)
