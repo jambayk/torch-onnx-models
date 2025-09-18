@@ -43,6 +43,10 @@ def barrier_op(
         The same number of Tensors as inputs, in the same order. If an input is None,
         the corresponding output will also be None.
     """
+    if not torch.onnx.is_in_onnx_export():
+        # No-op outside of ONNX export
+        return inputs
+
     # NOTE: inputs can have None values but that makes typing hard. So we don't annotate
     if metadata is None:
         metadata = {}
