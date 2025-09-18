@@ -217,7 +217,7 @@ def attention_contrib_mha(
             dtype=value.dtype,
             shape=(batch_size, seq_length, q_num_heads * value.shape[-1]),
             version=1,
-        )
+        ),
         present_key,
         present_value,
     )

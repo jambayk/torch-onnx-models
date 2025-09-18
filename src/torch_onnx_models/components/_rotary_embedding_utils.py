@@ -37,6 +37,8 @@ def apply_rope(
     Returns:
         torch.Tensor: The transformed hidden states with RoPE applied, of the same shape as input.
     """
+    #  remove the reshape once migrated to latest nightly pytorch
+    x_shape = x.shape
     return torch.onnx.ops.rotary_embedding(
         x,
         cos_cache,
@@ -44,7 +46,7 @@ def apply_rope(
         position_ids=position_ids,
         rotary_embedding_dim=rotary_embedding_dim,
         num_heads=num_heads,
-    )
+    ).reshape(x_shape)
 
 
 def apply_rope_decomposed(
