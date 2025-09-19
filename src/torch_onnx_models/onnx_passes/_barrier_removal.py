@@ -29,6 +29,9 @@ def _pop_node(node: ir.Node) -> None:
                 assert replacement_output is not None
                 graph.outputs[idx] = replacement_output
 
+                # Maintain the name of the graph output
+                replacement_output.name = graph_output.name
+
     # Finally remove the node
     graph.remove(node, safe=True)
 

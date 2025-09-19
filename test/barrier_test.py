@@ -71,7 +71,6 @@ class BarrierTest(unittest.TestCase):
         model = _activations.QuickGELUActivation()
         x = torch.randn(2, 3)
         onnx_program = torch.onnx.export(model, (x,), dynamo=True, verbose=False)
-        print(onnx_program.model)
         barrier_node = next(
             node for node in onnx_program.model.graph if node.op_type == "Barrier"
         )
