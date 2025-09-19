@@ -85,6 +85,11 @@ class QuickGELUActivation(nn.Module):
         return quick_gelu(input)
 
 
+class MsftQuickGELUActivation(nn.Module):
+    def forward(self, input: Tensor) -> Tensor:
+        return quick_gelu_msft(input)
+
+
 class ClippedGELUActivation(nn.Module):
     """
     Clip the range of possible GeLU outputs between [min, max]. This is especially useful for quantization purpose, as
