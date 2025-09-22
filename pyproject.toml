@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "torch-onnx-models"
 version = "0.1.0"
-description = "Models and components for PyTorch and ONNX."
+description = "Models and components for PyTorch and ONNX with advanced weight loading, module barriers, and config building capabilities."
 authors = [
     { name = "Jambay Kinley", email = "jambaykinley@microsoft.com" },
     { name = "Justin Chu", email = "justinchu@microsoft.com" },
@@ -17,6 +17,20 @@ dependencies = [
 	"torch>=2.8.0",
 	"onnx",
     "onnxscript",
+]
+
+[project.optional-dependencies]
+huggingface = [
+    "transformers>=4.20.0",
+    "tokenizers>=0.13.0",
+]
+safetensors = [
+    "safetensors>=0.3.0",
+]
+full = [
+    "transformers>=4.20.0",
+    "tokenizers>=0.13.0",
+    "safetensors>=0.3.0",
 ]
 
 [tool.pytest.ini_options]
