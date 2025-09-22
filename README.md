@@ -443,8 +443,10 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 
 ## Authors
 
-- **Jambay Kinley** - jambaykinley@microsoft.com
-- **Justin Chu** - justinchu@microsoft.com
+- **Jambay Kinley**
+- **Justin Chu** 
+- **Lee Stott**
+- **Kinfey Lo**
 
 ## Related Projects
 
