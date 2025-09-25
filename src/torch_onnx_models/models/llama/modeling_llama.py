@@ -1,4 +1,4 @@
-from typing import Callable
+from __future__ import annotations
 
 import torch
 from torch import nn
@@ -25,7 +25,7 @@ class LlamaDecoderLayer(GradientCheckpointingLayer):
 
         self.self_attn = LlamaAttention(config=config, layer_idx=layer_idx)
 
-        self.mlp = LlamaMLP(config)
+        self.mlp = components.LlamaMLP(config)
         self.input_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 

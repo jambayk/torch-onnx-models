@@ -4,12 +4,12 @@ import torch
 from torch import nn
 from torch_onnx_models.components._attention_utils import attention, attention_decomposed, attention_contrib_mha
 from torch_onnx_models.components._rotary_embedding_utils import apply_rope, apply_rope_decomposed, apply_rope_contrib
-
+from torch_onnx_models import _configs
 
 class Attention(nn.Module):
 
     # replace config typing with actual config class later
-    def __init__(self, config):
+    def __init__(self, config: _configs.ArchitectureConfig):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.head_dim = config.head_dim

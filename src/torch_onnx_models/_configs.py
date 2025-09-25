@@ -3,7 +3,7 @@ import torch
 
 
 @dataclasses.dataclass
-class ModelConfig:
+class ArchitectureConfig:
     # Config from transformers
     pass
 

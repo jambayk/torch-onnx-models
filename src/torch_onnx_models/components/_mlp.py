@@ -2,11 +2,11 @@ import torch
 from torch import nn
 
 from torch_onnx_models.components import _activations
+from torch_onnx_models import _configs
 
 
 class Phi3MLP(nn.Module):
-    # TODO: Pin down the config implementation
-    def __init__(self, config):
+    def __init__(self, config: _configs.ArchitectureConfig):
         super().__init__()
 
         self.config = config
@@ -26,8 +26,9 @@ class Phi3MLP(nn.Module):
 
 
 class LlamaMLP(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: _configs.ArchitectureConfig):
         super().__init__()
+
         self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
