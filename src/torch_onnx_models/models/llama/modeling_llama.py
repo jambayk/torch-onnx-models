@@ -96,8 +96,7 @@ class LlamaModel(nn.Module):
         input_ids: torch.LongTensor,
         attention_mask: torch.Tensor,
         position_ids: torch.LongTensor,
-        past_keys: Sequence[torch.Tensor],
-        past_values: Sequence[torch.Tensor],
+        past_key_values: Sequence[tuple[torch.Tensor, torch.Tensor]],
     ):
         inputs_embeds = self.embed_tokens(input_ids)
 
@@ -114,8 +113,8 @@ class LlamaModel(nn.Module):
                 hidden_states=hidden_states,
                 attention_mask=attention_bias,
                 position_ids=position_ids,
-                past_key=past_keys[i],
-                past_value=past_values[i],
+                past_key=past_key_values[i][0],
+                past_value=past_key_values[i][0],
                 cos_cache=self.cos_cache,
                 sin_cache=self.sin_cache,
             )
@@ -135,15 +134,13 @@ class LlamaForCausalLM(nn.Module):
         input_ids: torch.LongTensor,
         attention_mask: torch.Tensor,
         position_ids: torch.LongTensor,
-        past_keys: Sequence[torch.Tensor],
-        past_values: Sequence[torch.Tensor],
+        past_key_values: Sequence[tuple[torch.Tensor, torch.Tensor]],
     ):
         hidden_states = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_keys=past_keys,
-            past_values=past_values,
+            past_key_values=past_key_values,
         )
 
         logits = self.lm_head(hidden_states)
