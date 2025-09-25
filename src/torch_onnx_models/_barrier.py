@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import functools
+import os
 import inspect
 import json
 from collections import Counter
@@ -9,6 +10,8 @@ from typing import Any, Literal, TypeVar
 
 import onnx_ir as ir
 import torch
+
+ENABLE_BARRIER = os.getenv("TORCH_ONNX_MODELS_ENABLE_BARRIER", "0") == "1"
 
 COUNTER = Counter()
 
@@ -43,7 +46,7 @@ def barrier_op(
         The same number of Tensors as inputs, in the same order. If an input is None,
         the corresponding output will also be None.
     """
-    if not torch.onnx.is_in_onnx_export():
+    if not torch.onnx.is_in_onnx_export() or not ENABLE_BARRIER:
         # No-op outside of ONNX export
         return inputs
 
