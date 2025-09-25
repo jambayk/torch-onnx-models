@@ -76,16 +76,44 @@ class LlamaRotaryEmbedding(nn.Module):
         self.rope_type = config.rope_type or "default"
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
+        self.head_dim = config.head_dim
+        self.base = 10_000
 
         self.config = config
 
-        # inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
-
-    def forward(self, x, position_ids):
-        # FIXME: What should this look like?
-        components.apply_rope(
-            x=x, cos_cache=None, sin_cache=None, position_ids=position_ids
+        # Compute inverse frequencies and register as buffer
+        inv_freq = 1.0 / (
+            self.base ** (torch.arange(0, self.head_dim, 2, dtype=torch.float32) / self.head_dim)
         )
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+
+    def forward(self, position_ids: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Compute cos_cache and sin_cache from position_ids.
+
+        Args:
+            position_ids: Position indices tensor
+
+        Returns:
+            cos_cache: Cosine cache tensor of shape (max_position_embeddings, head_dim // 2)
+            sin_cache: Sine cache tensor of shape (max_position_embeddings, head_dim // 2)
+        """
+        device = position_ids.device
+
+        # Ensure inv_freq is on the correct device
+        inv_freq = self.inv_freq.to(device)
+
+        # Create position embeddings for all possible positions up to max
+        positions = torch.arange(self.max_seq_len_cached, dtype=torch.float32, device=device)
+
+        # Compute the angles: outer product of positions and inv_freq
+        freqs = torch.outer(positions, inv_freq)  # (max_position_embeddings, head_dim // 2)
+
+        # Compute cos and sin caches
+        cos_cache = torch.cos(freqs)
+        sin_cache = torch.sin(freqs)
+
+        return cos_cache, sin_cache
 
 
 class LlamaModel(nn.Module):
@@ -119,32 +147,20 @@ class LlamaModel(nn.Module):
     ):
         inputs_embeds = self.embed_tokens(input_ids)
 
-        # TODO: Implement create_causal_mask
-        causal_mask = create_causal_mask(
-            config=self.config,
-            input_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            cache_position=cache_position,
-            past_keys=past_keys,
-            past_values=past_values,
-            position_ids=position_ids,
-        )
-
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+
+        # Compute cos_cache and sin_cache from position_ids
+        cos_cache, sin_cache = self.rotary_emb(position_ids)
 
         for i, decoder_layer in enumerate(self.layers):
-            # TODO(justinchuby): Compute cos_cache, sin_cache from positions?
-            # FIXME: How should position_embeddings be handled?
             hidden_states = decoder_layer(
-                hidden_states,
-                attention_mask=causal_mask,
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
                 position_ids=position_ids,
                 past_key=past_keys[i],
                 past_value=past_values[i],
                 cos_cache=cos_cache,
                 sin_cache=sin_cache,
-                position_embeddings=position_embeddings,
             )
 
         hidden_states = self.norm(hidden_states)
