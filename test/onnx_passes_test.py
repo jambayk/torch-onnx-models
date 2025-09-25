@@ -81,5 +81,18 @@ class SubgraphReplacementTest(unittest.TestCase):
         print(model)
 
 
+class RemoveBarrierPassTest(unittest.TestCase):
+    def test_pass(self):
+        x = torch.randn(2, 3)
+        onnx_program = torch.onnx.export(
+            QuickGELUActivation(), (x,), dynamo=True, verbose=False
+        )
+        model = onnx_program.model
+        self.assertIn("Barrier", [node.op_type for node in model.graph])
+        onnx_passes.RemoveBarrierPass()(model)
+        self.assertEqual(len(model.graph), 3)
+        self.assertNotIn("Barrier", [node.op_type for node in model.graph])
+
+
 if __name__ == "__main__":
     unittest.main()
