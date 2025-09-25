@@ -15,11 +15,13 @@ class LlamaRMSNorm(components.RMSNorm):
 
 
 class LlamaAttention(components.Attention):
-    pass
+    def __init__(self, config, layer_idx: int):
+        super().__init__(config)
+        self.layer_idx = layer_idx
 
 
 class LlamaDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: LlamaConfig, layer_idx: int):
+    def __init__(self, config: , layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
 
