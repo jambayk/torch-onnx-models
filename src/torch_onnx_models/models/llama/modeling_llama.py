@@ -68,45 +68,6 @@ class LlamaDecoderLayer(nn.Module):
         return hidden_states
 
 
-class LlamaRotaryEmbedding(nn.Module):
-    cos_cache: torch.Tensor  # fix linting for `register_buffer`
-    sin_cache: torch.Tensor  # fix linting for `register_buffer`
-
-    def __init__(self, config: ArchitectureConfig):
-        super().__init__()
-
-        self.rope_type = config.rope_type or "default"
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
-        self.head_dim = config.head_dim
-        self.base = 10_000
-
-        self.config = config
-
-        # Initialize rope frequencies using the utility function
-        cos_cache, sin_cache = initialize_rope_freqs(
-            dim=self.head_dim // 2,
-            max_position_embeddings=self.max_seq_len_cached,
-            base=self.base
-        )
-        self.register_buffer("cos_cache", cos_cache, persistent=False)
-        self.register_buffer("sin_cache", sin_cache, persistent=False)
-
-    def forward(self, cache_position: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Get cos_cache and sin_cache for the given cache positions.
-
-        Args:
-            cache_position: Position indices tensor for cache lookup
-
-        Returns:
-            cos_cache: Cosine cache tensor
-            sin_cache: Sine cache tensor
-        """
-        # Return the pre-computed caches
-        return self.cos_cache, self.sin_cache
-
-
 class LlamaModel(nn.Module):
     def __init__(self, config: ArchitectureConfig):
         super().__init__(config)
@@ -123,8 +84,25 @@ class LlamaModel(nn.Module):
             ]
         )
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = LlamaRotaryEmbedding(config=config)
         self.config = config
+
+        # Initialize rope frequencies using the utility function
+        inv_freq, attention_factor = initialize_rope_freqs(config=config)
+
+        # Create position indices for all positions up to max_position_embeddings
+        max_seq_len = config.max_position_embeddings
+        positions = torch.arange(max_seq_len, dtype=torch.float32)
+
+        # Compute the angles for each position and frequency
+        # positions: [max_seq_len], inv_freq: [dim//2] -> angles: [max_seq_len, dim//2]
+        angles = torch.outer(positions, inv_freq)
+
+        # Precompute cos and sin caches
+        cos_cache = torch.cos(angles)
+        sin_cache = torch.sin(angles)
+
+        self.register_buffer("cos_cache", cos_cache, persistent=False)
+        self.register_buffer("sin_cache", sin_cache, persistent=False)
 
     def forward(
         self,
@@ -134,14 +112,11 @@ class LlamaModel(nn.Module):
         position_ids: torch.LongTensor,
         past_keys: Sequence[torch.Tensor],
         past_values: Sequence[torch.Tensor],
-        cache_position: torch.LongTensor,
     ):
         inputs_embeds = self.embed_tokens(input_ids)
 
         hidden_states = inputs_embeds
 
-        # Get cos_cache and sin_cache using cache_position
-        cos_cache, sin_cache = self.rotary_emb(cache_position)
         attention_bias = components.create_attention_bias(
             attention_mask=attention_mask,
             query_length=torch.tensor(hidden_states.size(1)),
@@ -155,8 +130,8 @@ class LlamaModel(nn.Module):
                 position_ids=position_ids,
                 past_key=past_keys[i],
                 past_value=past_values[i],
-                cos_cache=cos_cache,
-                sin_cache=sin_cache,
+                cos_cache=self.cos_cache,
+                sin_cache=self.sin_cache,
             )
 
         hidden_states = self.norm(hidden_states)
@@ -176,7 +151,6 @@ class LlamaForCausalLM(nn.Module):
         position_ids: torch.LongTensor,
         past_keys: Sequence[torch.Tensor],
         past_values: Sequence[torch.Tensor],
-        cache_position: torch.LongTensor,
     ):
         hidden_states = self.model(
             input_ids=input_ids,
@@ -184,7 +158,6 @@ class LlamaForCausalLM(nn.Module):
             position_ids=position_ids,
             past_keys=past_keys,
             past_values=past_values,
-            cache_position=cache_position,
         )
 
         logits = self.lm_head(hidden_states)

@@ -31,8 +31,8 @@ def _compute_default_rope_parameters(
 # TODO(jambayk): add support for interleaved format if needed
 # requires torch 2.9+
 def apply_rope(
-    *,
     x: torch.Tensor,
+    *,
     cos_cache: torch.Tensor,
     sin_cache: torch.Tensor,
     position_ids: torch.Tensor,
