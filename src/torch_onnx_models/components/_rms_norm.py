@@ -1,17 +1,20 @@
 from __future__ import annotations
 
+__all__ = ["RMSNorm"]
+
 import torch
 from torch import nn
 from torch_onnx_models.components._rms_norm_utils import (
     apply_rms_norm,
-    apply_rms_norm_decomposed,
-    apply_rms_norm_contrib,
+    # apply_rms_norm_decomposed,
+    # apply_rms_norm_contrib,
 )
 
 
 class RMSNorm(nn.Module):
     def __init__(self, hidden_size: int, eps: float = 1e-6):
         super().__init__()
+        # Mark: weights
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
