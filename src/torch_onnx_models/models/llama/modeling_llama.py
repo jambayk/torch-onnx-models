@@ -86,21 +86,7 @@ class LlamaModel(nn.Module):
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.config = config
 
-        # Initialize rope frequencies using the utility function
-        inv_freq, attention_factor = initialize_rope_freqs(config=config)
-
-        # Create position indices for all positions up to max_position_embeddings
-        max_seq_len = config.max_position_embeddings
-        positions = torch.arange(max_seq_len, dtype=torch.float32)
-
-        # Compute the angles for each position and frequency
-        # positions: [max_seq_len], inv_freq: [dim//2] -> angles: [max_seq_len, dim//2]
-        angles = torch.outer(positions, inv_freq)
-
-        # Precompute cos and sin caches
-        cos_cache = torch.cos(angles)
-        sin_cache = torch.sin(angles)
-
+        cos_cache, sin_cache = components.create_rope_caches(config)
         self.register_buffer("cos_cache", cos_cache, persistent=False)
         self.register_buffer("sin_cache", sin_cache, persistent=False)
 

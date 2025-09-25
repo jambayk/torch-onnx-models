@@ -4,7 +4,29 @@ import torch
 from torch_onnx_models import _configs
 
 
-def initialize_rope_freqs(
+def create_rope_caches(
+    config: _configs.ArchitectureConfig,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    # Initialize rope frequencies using the utility function
+    # TODO: What is attention_factor?
+    inv_freq, attention_factor = _initialize_rope_freqs(config=config)
+
+    # Create position indices for all positions up to max_position_embeddings
+    max_seq_len = config.max_position_embeddings
+    # TODO: position_scale
+    positions = torch.arange(max_seq_len, dtype=torch.float32)
+
+    # Compute the angles for each position and frequency
+    # positions: [max_seq_len], inv_freq: [dim//2] -> angles: [max_seq_len, dim//2]
+    angles = torch.outer(positions, inv_freq)
+
+    # Precompute cos and sin caches
+    cos_cache = torch.cos(angles)
+    sin_cache = torch.sin(angles)
+    return cos_cache, sin_cache
+
+
+def _initialize_rope_freqs(
     config: _configs.ArchitectureConfig,
 ) -> tuple[torch.Tensor, float]:
     if config.rope_type == "default":

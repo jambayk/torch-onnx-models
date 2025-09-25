@@ -7,6 +7,8 @@ import torch
 
 @dataclasses.dataclass
 class ArchitectureConfig:
+    dtype: torch.dtype = torch.float32
+
     # Config from transformers
     head_dim: int = -42
     num_attention_heads: int = -42
@@ -26,7 +28,10 @@ class ArchitectureConfig:
     rope_theta: float = 10_000.0
     max_position_embeddings: int = -42
 
+    def from_transformers(self, config) -> ArchitectureConfig:
+        ...
+
 
 @dataclasses.dataclass
 class ExportConfig:
-    dtype: torch.dtype = torch.float32
+    nothing_yet: bool = True
