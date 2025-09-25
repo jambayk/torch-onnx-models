@@ -1,16 +1,21 @@
 import unittest
 
 import torch
+
+import torch_onnx_models
 from torch_onnx_models.components._attention import Attention
 from torch_onnx_models.components._attention_utils import create_attention_bias
-from argparse import Namespace
+from torch.onnx._internal.exporter import _testing as onnx_testing
 
 
 class AttentionTest(unittest.TestCase):
     def test_export(self):
-
-        config = Namespace(
-            hidden_size=2048, head_dim=64, num_attention_heads=32, num_key_value_heads=8, attention_bias=False
+        config = torch_onnx_models.ArchitectureConfig(
+            hidden_size=2048,
+            head_dim=64,
+            num_attention_heads=32,
+            num_key_value_heads=8,
+            attention_bias=False,
         )
 
         attention = Attention(config)
@@ -19,18 +24,28 @@ class AttentionTest(unittest.TestCase):
         past_length = 5
         seq_length = 10
         max_length = 100
-        attention_mask = torch.ones((batch_size, past_length + seq_length), dtype=torch.bool)
+        attention_mask = torch.ones(
+            (batch_size, past_length + seq_length), dtype=torch.bool
+        )
 
         inputs = {
             "hidden_states": torch.randn(batch_size, seq_length, config.hidden_size),
             "attention_bias": create_attention_bias(
-                attention_mask=attention_mask, query_length=seq_length, dtype=torch.float32
+                attention_mask=attention_mask,
+                query_length=torch.tensor(seq_length),
+                dtype=torch.float32,
             ),
-            "position_ids": torch.arange(past_length, past_length + seq_length).unsqueeze(0),
+            "position_ids": torch.arange(
+                past_length, past_length + seq_length
+            ).unsqueeze(0),
             "cos_cache": torch.randn(max_length, config.head_dim // 2),
             "sin_cache": torch.randn(max_length, config.head_dim // 2),
-            "past_key": torch.randn(batch_size, config.num_key_value_heads, past_length, config.head_dim),
-            "past_value": torch.randn(batch_size, config.num_key_value_heads, past_length, config.head_dim),
+            "past_key": torch.randn(
+                batch_size, config.num_key_value_heads, past_length, config.head_dim
+            ),
+            "past_value": torch.randn(
+                batch_size, config.num_key_value_heads, past_length, config.head_dim
+            ),
         }
         dynamic_shapes = {
             # "hidden_states": {0: "batch_size", 1: "seq_length"},
@@ -51,6 +66,7 @@ class AttentionTest(unittest.TestCase):
             opset_version=23,
             dynamo=True,
         )
+        onnx_testing.assert_onnx_program(onnx_program, backend="reference")
 
 
 if __name__ == "__main__":
