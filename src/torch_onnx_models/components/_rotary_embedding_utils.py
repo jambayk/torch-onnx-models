@@ -1,13 +1,31 @@
 from __future__ import annotations
 
 import torch
+from torch_onnx_models import _configs
 
 
 def initialize_rope_freqs(
-    dim: int, max_position_embeddings: int, base: int = 10_000
-) -> tuple[torch.Tensor, torch.Tensor]:
-    # just a place holder that returns random values for now
-    return torch.rand(max_position_embeddings, dim), torch.rand(max_position_embeddings, dim)
+    config: _configs.ArchitectureConfig,
+) -> tuple[torch.Tensor, float]:
+    if config.rope_type == "default":
+        return _compute_default_rope_parameters(config)
+    raise ValueError(f"Unsupported rope_type: {config.rope_type}")
+
+
+def _compute_default_rope_parameters(
+    config: _configs.ArchitectureConfig,
+) -> tuple[torch.Tensor, float]:
+    # https://github.com/huggingface/transformers/blob/6dc9ed87a02db8b4ecc26a5e98596cd2bba380b5/src/transformers/modeling_rope_utils.py#L92
+    base = config.rope_theta
+    partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
+    head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+    dim = int(head_dim * partial_rotary_factor)
+
+    attention_factor = 1.0  # Unused in this type of RoPE
+
+    # Compute the inverse frequencies
+    inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64) / dim))
+    return inv_freq, attention_factor
 
 
 # TODO(jambayk): add support for interleaved format if needed

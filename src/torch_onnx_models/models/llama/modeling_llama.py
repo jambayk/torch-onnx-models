@@ -7,6 +7,7 @@ import torch
 from torch import nn
 
 from torch_onnx_models import ArchitectureConfig, components
+from torch_onnx_models.components._rotary_embedding_utils import initialize_rope_freqs
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ class LlamaDecoderLayer(nn.Module):
         self,
         *,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None,
+        attention_bias: torch.Tensor | None,
         position_ids: torch.LongTensor,
         cos_cache: torch.Tensor,
         sin_cache: torch.Tensor,
@@ -50,7 +51,7 @@ class LlamaDecoderLayer(nn.Module):
         # Self Attention
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
-            attention_bias=attention_mask,
+            attention_bias=attention_bias,
             position_ids=position_ids,
             cos_cache=cos_cache,
             sin_cache=sin_cache,
@@ -68,7 +69,8 @@ class LlamaDecoderLayer(nn.Module):
 
 
 class LlamaRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+    cos_cache: torch.Tensor  # fix linting for `register_buffer`
+    sin_cache: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, config: ArchitectureConfig):
         super().__init__()
@@ -81,39 +83,28 @@ class LlamaRotaryEmbedding(nn.Module):
 
         self.config = config
 
-        # Compute inverse frequencies and register as buffer
-        inv_freq = 1.0 / (
-            self.base ** (torch.arange(0, self.head_dim, 2, dtype=torch.float32) / self.head_dim)
+        # Initialize rope frequencies using the utility function
+        cos_cache, sin_cache = initialize_rope_freqs(
+            dim=self.head_dim // 2,
+            max_position_embeddings=self.max_seq_len_cached,
+            base=self.base
         )
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.register_buffer("cos_cache", cos_cache, persistent=False)
+        self.register_buffer("sin_cache", sin_cache, persistent=False)
 
-    def forward(self, position_ids: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, cache_position: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Compute cos_cache and sin_cache from position_ids.
+        Get cos_cache and sin_cache for the given cache positions.
 
         Args:
-            position_ids: Position indices tensor
+            cache_position: Position indices tensor for cache lookup
 
         Returns:
-            cos_cache: Cosine cache tensor of shape (max_position_embeddings, head_dim // 2)
-            sin_cache: Sine cache tensor of shape (max_position_embeddings, head_dim // 2)
+            cos_cache: Cosine cache tensor
+            sin_cache: Sine cache tensor
         """
-        device = position_ids.device
-
-        # Ensure inv_freq is on the correct device
-        inv_freq = self.inv_freq.to(device)
-
-        # Create position embeddings for all possible positions up to max
-        positions = torch.arange(self.max_seq_len_cached, dtype=torch.float32, device=device)
-
-        # Compute the angles: outer product of positions and inv_freq
-        freqs = torch.outer(positions, inv_freq)  # (max_position_embeddings, head_dim // 2)
-
-        # Compute cos and sin caches
-        cos_cache = torch.cos(freqs)
-        sin_cache = torch.sin(freqs)
-
-        return cos_cache, sin_cache
+        # Return the pre-computed caches
+        return self.cos_cache, self.sin_cache
 
 
 class LlamaModel(nn.Module):
@@ -138,8 +129,8 @@ class LlamaModel(nn.Module):
     def forward(
         self,
         *,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
+        input_ids: torch.LongTensor,
+        attention_mask: torch.Tensor,
         position_ids: torch.LongTensor,
         past_keys: Sequence[torch.Tensor],
         past_values: Sequence[torch.Tensor],
@@ -149,13 +140,18 @@ class LlamaModel(nn.Module):
 
         hidden_states = inputs_embeds
 
-        # Compute cos_cache and sin_cache from position_ids
-        cos_cache, sin_cache = self.rotary_emb(position_ids)
+        # Get cos_cache and sin_cache using cache_position
+        cos_cache, sin_cache = self.rotary_emb(cache_position)
+        attention_bias = components.create_attention_bias(
+            attention_mask=attention_mask,
+            query_length=torch.tensor(hidden_states.size(1)),
+            dtype=hidden_states.dtype,
+        )
 
         for i, decoder_layer in enumerate(self.layers):
             hidden_states = decoder_layer(
                 hidden_states=hidden_states,
-                attention_mask=attention_mask,
+                attention_mask=attention_bias,
                 position_ids=position_ids,
                 past_key=past_keys[i],
                 past_value=past_values[i],
