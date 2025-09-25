@@ -27,6 +27,7 @@ class ArchitectureConfig:
     rope_type: str = "default"
     rope_theta: float = 10_000.0
     max_position_embeddings: int = -42
+    partial_rotary_factor: float = 1.0  # 1.0 means no partial RoPE
 
     def from_transformers(self, config) -> ArchitectureConfig:
         ...

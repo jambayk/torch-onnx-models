@@ -8,7 +8,7 @@ def create_rope_caches(
     config: _configs.ArchitectureConfig,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     # Initialize rope frequencies using the utility function
-    # TODO: What is attention_factor?
+
     inv_freq, attention_factor = _initialize_rope_freqs(config=config)
 
     # Create position indices for all positions up to max_position_embeddings
@@ -21,8 +21,8 @@ def create_rope_caches(
     angles = torch.outer(positions, inv_freq)
 
     # Precompute cos and sin caches
-    cos_cache = torch.cos(angles)
-    sin_cache = torch.sin(angles)
+    cos_cache = torch.cos(angles) * attention_factor
+    sin_cache = torch.sin(angles) * attention_factor
     return cos_cache, sin_cache
 
 
@@ -39,14 +39,14 @@ def _compute_default_rope_parameters(
 ) -> tuple[torch.Tensor, float]:
     # https://github.com/huggingface/transformers/blob/6dc9ed87a02db8b4ecc26a5e98596cd2bba380b5/src/transformers/modeling_rope_utils.py#L92
     base = config.rope_theta
-    partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
-    head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+    partial_rotary_factor = config.partial_rotary_factor
+    head_dim = config.head_dim
     dim = int(head_dim * partial_rotary_factor)
 
     attention_factor = 1.0  # Unused in this type of RoPE
 
     # Compute the inverse frequencies
-    inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64) / dim))
+    inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
     return inv_freq, attention_factor
 
 
