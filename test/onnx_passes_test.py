@@ -4,7 +4,7 @@ import unittest
 
 import torch
 
-from torch_onnx_models import onnx_passes
+from torch_onnx_models import onnx_passes, _barrier
 from torch_onnx_models.components._activations import (
     MsftQuickGELUActivation,
     QuickGELUActivation,
@@ -43,6 +43,12 @@ class AssignNamesPassTest(unittest.TestCase):
 
 
 class RemoveBarrierPassTest(unittest.TestCase):
+    def setUp(self) -> None:
+        _barrier.ENABLE_BARRIER = True
+
+    def tearDown(self) -> None:
+        _barrier.ENABLE_BARRIER = False
+
     def test_pass(self):
         x = torch.randn(2, 3)
         onnx_program = torch.onnx.export(
@@ -56,6 +62,12 @@ class RemoveBarrierPassTest(unittest.TestCase):
 
 
 class SubgraphReplacementTest(unittest.TestCase):
+    def setUp(self) -> None:
+        _barrier.ENABLE_BARRIER = True
+
+    def tearDown(self) -> None:
+        _barrier.ENABLE_BARRIER = False
+
     def test_pass(self):
         x = torch.randn(2, 3)
         model = torch.onnx.export(

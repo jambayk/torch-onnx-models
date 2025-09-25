@@ -9,19 +9,18 @@ from torch_onnx_models.components._rms_norm import RMSNorm
 class RMSNormTest(unittest.TestCase):
     @parameterized.parameterized.expand(
         [
-            ("ort", 18),
-            ("onnx", 18),
-            ("onnx", 23),
+            (18,),
+            (23,),
         ]
     )
-    def test_export(self, mode: str, opset_version: int):
+    def test_export(self, opset_version: int):
         hidden_size = 768
-        model = RMSNorm(hidden_size=hidden_size, mode=mode)
+        model = RMSNorm(hidden_size=hidden_size)
         model.eval()
 
         input = torch.randn(2, 128, 768)
 
-        ref_model = RMSNorm(hidden_size=hidden_size, mode="onnx")
+        ref_model = RMSNorm(hidden_size=hidden_size)
         ref_model.eval()
 
         ref_ep = torch.export.export(ref_model, (input,))

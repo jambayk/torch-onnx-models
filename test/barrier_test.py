@@ -35,6 +35,12 @@ class Model(torch.nn.Module):
 
 
 class BarrierTest(unittest.TestCase):
+    def setUp(self) -> None:
+        _barrier.ENABLE_BARRIER = True
+
+    def tearDown(self) -> None:
+        _barrier.ENABLE_BARRIER = False
+
     def test_decorator(self):
         model = ModelWithDecoratedBarrier().eval()
 
