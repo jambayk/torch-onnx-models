@@ -21,9 +21,10 @@ def create_attention_bias(
         torch.Tensor: The attention bias tensor reshaped and cast to the specified dtype of shape (batch_size, 1, query_length, total_length).
     """
     all_indices = attention_mask.cumsum(-1)
-    kv_indices = all_indices[:, None, :]
+    kv_indices = torch.unsqueeze(all_indices, 1)
     # should we make this not data dependent slicing?
     # like q_indices = torch.arange(Q, device=attention_mask.device)
+    q_indices = torch.unsqueeze(all_indices, -1)
     q_indices = all_indices[:, -query_length:, None]
     full_mask = q_indices >= kv_indices
     full_mask &= attention_mask[:, None, :].to(torch.bool)

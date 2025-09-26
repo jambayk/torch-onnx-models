@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-
 import torch
-from torch_onnx_models import _configs
+from torch._subclasses.fake_tensor import FakeTensorMode
 from transformers import AutoConfig
+
+from torch_onnx_models import _configs
 from torch_onnx_models.models.llama.modeling_llama import LlamaForCausalLM
 
 
@@ -78,7 +79,9 @@ def _convert_hf_model(model_id: str = "meta-llama/Llama-2-7b-hf"):
     architecture_config = _configs.ArchitectureConfig.from_transformers(config)
 
     example_inputs, dynamic_shapes = _create_example_inputs(architecture_config, None)
-    model = LlamaForCausalLM(architecture_config)
+
+    with FakeTensorMode():
+        model = LlamaForCausalLM(architecture_config)
 
     onnx_program = torch.onnx.export(
         model,
