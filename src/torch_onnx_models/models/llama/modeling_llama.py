@@ -103,7 +103,7 @@ class LlamaModel(nn.Module):
 
         attention_bias = components.create_attention_bias(
             attention_mask=attention_mask,
-            query_length=torch.tensor(hidden_states.size(1)),
+            query_length=hidden_states.size(1),
             dtype=hidden_states.dtype,
         )
 

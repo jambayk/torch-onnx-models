@@ -32,7 +32,7 @@ class AttentionTest(unittest.TestCase):
             "hidden_states": torch.randn(batch_size, seq_length, config.hidden_size),
             "attention_bias": create_attention_bias(
                 attention_mask=attention_mask,
-                query_length=torch.tensor(seq_length),
+                query_length=seq_length,
                 dtype=torch.float32,
             ),
             "position_ids": torch.arange(

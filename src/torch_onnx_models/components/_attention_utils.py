@@ -6,7 +6,7 @@ import torch.nn as nn
 
 # TODO(jambayk): generalize to include sliding window
 def create_attention_bias(
-    *, attention_mask: torch.Tensor, query_length: torch.Tensor, dtype: torch.dtype, mask_value: float = None
+    *, attention_mask: torch.Tensor, query_length: int | torch.SymInt, dtype: torch.dtype, mask_value: float | None = None
 ) -> torch.Tensor:
     """
     Create attention bias for use in attention mechanisms.
@@ -22,15 +22,15 @@ def create_attention_bias(
     """
     all_indices = attention_mask.cumsum(-1)
     kv_indices = torch.unsqueeze(all_indices, 1)
-    # should we make this not data dependent slicing?
-    # like q_indices = torch.arange(Q, device=attention_mask.device)
-    q_indices = torch.unsqueeze(all_indices, -1)
-    q_indices = all_indices[:, -query_length:, None]
+    # TODO(justinchuby): I don't know what I am doing here
+    # q_indices = torch.arange(query_length, device=attention_mask.device)
+    q_indices = all_indices[:, -query_length:]
+    q_indices = torch.unsqueeze(q_indices, -1)
     full_mask = q_indices >= kv_indices
-    full_mask &= attention_mask[:, None, :].to(torch.bool)
+    full_mask = torch.logical_and(torch.unsqueeze(attention_mask, 1).to(torch.bool), full_mask)
     # make the negative value configurable
-    mask_value = torch.finfo(dtype).min if mask_value is None else torch.tensor(mask_value, dtype=dtype)
-    return torch.where(full_mask, 0.0, mask_value)[:, None, :, :]
+    mask_value_tensor = torch.finfo(dtype).min if mask_value is None else torch.tensor(mask_value, dtype=dtype)
+    return torch.unsqueeze(torch.where(full_mask, torch.tensor(0.0, dtype=dtype), mask_value_tensor), 1)
 
 
 # TODO(jambayk): add doc strings for shape of outputs
