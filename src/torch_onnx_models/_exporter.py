@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import torch
 from torch_onnx_models import _configs
+from transformers import AutoConfig
+from torch_onnx_models.models.llama.modeling_llama import LlamaForCausalLM
 
 
 def _create_example_inputs(
@@ -69,3 +71,20 @@ def _create_example_inputs(
     )
 
     return example_inputs, dynamic_shapes
+
+
+def _convert_hf_model(model_id: str = "meta-llama/Llama-2-7b-hf"):
+    config = AutoConfig.from_pretrained(model_id)
+    architecture_config = _configs.ArchitectureConfig.from_transformers(config)
+
+    model = LlamaForCausalLM(architecture_config)
+    example_inputs, dynamic_shapes = _create_example_inputs(architecture_config, None)
+
+    onnx_program = torch.onnx.export(
+        model, example_inputs, dynamic_shapes=dynamic_shapes, optimize=False
+    )
+
+    onnx_program.save("llama2_7b.onnx", include_initializers=False)
+
+
+_convert_hf_model()

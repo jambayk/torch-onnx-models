@@ -29,8 +29,46 @@ class ArchitectureConfig:
     max_position_embeddings: int = -42
     partial_rotary_factor: float = 1.0  # 1.0 means no partial RoPE
 
-    def from_transformers(self, config) -> ArchitectureConfig:
-        ...
+    @classmethod
+    def from_transformers(cls, config) -> ArchitectureConfig:
+        return cls(
+            head_dim=config.hidden_size // config.num_attention_heads,
+            num_attention_heads=config.num_attention_heads,
+            num_key_value_heads=getattr(config, "num_key_value_heads", config.num_attention_heads),
+            num_hidden_layers=config.num_hidden_layers,
+            vocab_size=config.vocab_size,
+            hidden_size=config.hidden_size,
+            intermediate_size=getattr(config, "intermediate_size", 4 * config.hidden_size),
+            hidden_act=getattr(config, "hidden_act", None),
+            pad_token_id=getattr(config, "pad_token_id", 0),  # FIXME
+            rms_norm_eps=getattr(config, "rms_norm_eps", 1e-6),
+            attention_bias=getattr(config, "add_bias_kv", False),
+            mlp_bias=getattr(config, "use_mlp_bias", False),
+            rope_type="default",  # only support default for now
+            rope_theta=getattr(config, "rope_theta", 10_000.0),
+            max_position_embeddings=config.max_position_embeddings,
+            partial_rotary_factor=getattr(config, "partial_rotary_factor", 1.0),
+            dtype=torch.float16,  # TODO: Fix this
+        )
+        # "bos_token_id": 1,
+        # "eos_token_id": 2,
+        # "hidden_act": "silu",
+        # "hidden_size": 4096,
+        # "initializer_range": 0.02,
+        # "intermediate_size": 11008,
+        # "max_position_embeddings": 4096,
+        # "model_type": "llama",
+        # "num_attention_heads": 32,
+        # "num_hidden_layers": 32,
+        # "num_key_value_heads": 32,
+        # "pretraining_tp": 1,
+        # "rms_norm_eps": 1e-05,
+        # "rope_scaling": null,
+        # # "tie_word_embeddings": false,
+        # "torch_dtype": "float16",
+        # "transformers_version": "4.31.0.dev0",
+        # "use_cache": true,
+        # "vocab_size": 32000
 
 
 @dataclasses.dataclass

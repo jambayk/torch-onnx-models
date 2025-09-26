@@ -7,7 +7,6 @@ import torch
 from torch import nn
 
 from torch_onnx_models import ArchitectureConfig, components
-from torch_onnx_models.components._rotary_embedding_utils import initialize_rope_freqs
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +69,7 @@ class LlamaDecoderLayer(nn.Module):
 
 class LlamaModel(nn.Module):
     def __init__(self, config: ArchitectureConfig):
-        super().__init__(config)
+        super().__init__()
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
@@ -125,7 +124,7 @@ class LlamaModel(nn.Module):
 
 class LlamaForCausalLM(nn.Module):
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__()
         self.model = LlamaModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
