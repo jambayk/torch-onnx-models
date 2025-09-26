@@ -27,8 +27,8 @@ def _create_example_inputs(
             1: sequence_len,
         },
         "past_key_values": [
-            [{0: batch, 2: past_sequence_len} for _ in range(num_hidden_layers)],
-            [{0: batch, 2: past_sequence_len} for _ in range(num_hidden_layers)],
+            ({0: batch, 2: past_sequence_len}, {0: batch, 2: past_sequence_len})
+            for _ in range(num_hidden_layers)
         ],
     }
 
@@ -77,11 +77,15 @@ def _convert_hf_model(model_id: str = "meta-llama/Llama-2-7b-hf"):
     config = AutoConfig.from_pretrained(model_id)
     architecture_config = _configs.ArchitectureConfig.from_transformers(config)
 
-    model = LlamaForCausalLM(architecture_config)
     example_inputs, dynamic_shapes = _create_example_inputs(architecture_config, None)
+    model = LlamaForCausalLM(architecture_config)
 
     onnx_program = torch.onnx.export(
-        model, example_inputs, dynamic_shapes=dynamic_shapes, optimize=False
+        model,
+        kwargs=example_inputs,
+        dynamic_shapes=dynamic_shapes,
+        dynamo=True,
+        optimize=False,
     )
 
     onnx_program.save("llama2_7b.onnx", include_initializers=False)
