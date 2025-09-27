@@ -85,6 +85,7 @@ def attention(
         )
     # TODO(justinchuby): Unfortunately, the meta implementation of torch.onnx.ops.attention
     # is using torch sdpa which has a strict requirement on the input shapes. Will fix that later
+    # Maybe I set the input shapes wrong
     return torch.onnx.ops.attention(
         query, key, value, bias, past_key, past_value, kv_num_heads=kv_num_heads, q_num_heads=q_num_heads, scale=scale
     )[:3]
