@@ -2,12 +2,13 @@ from __future__ import annotations
 
 __all__ = ["convert_hf_model"]
 
-import torch
-from torch._subclasses.fake_tensor import FakeTensorMode
-import onnx_ir.passes.common as common_passes
 import json
 
-from torch_onnx_models import _configs
+import onnx_ir.passes.common as common_passes
+import torch
+from torch._subclasses.fake_tensor import FakeTensorMode
+
+from torch_onnx_models import _configs, onnx_passes
 from torch_onnx_models.models.llama.modeling_llama import LlamaForCausalLM
 
 
@@ -78,7 +79,9 @@ def _create_example_inputs(
 
 
 def convert_hf_model(
-    model_id: str = "meta-llama/Llama-2-7b-hf", load_weights: bool = True, clear_metadata: bool = False
+    model_id: str = "meta-llama/Llama-2-7b-hf",
+    load_weights: bool = True,
+    clear_metadata: bool = False,
 ) -> torch.onnx.ONNXProgram:
     """Convert a HuggingFace model to ONNX.
 
@@ -113,8 +116,8 @@ def convert_hf_model(
     onnx_program.model.graph.name = model_id
 
     if load_weights:
-        from huggingface_hub import hf_hub_download
         import safetensors.torch
+        from huggingface_hub import hf_hub_download
 
         # TODO: Support changing local_dir later
         safetensors_index_path = hf_hub_download(
@@ -139,6 +142,7 @@ def convert_hf_model(
 
         onnx_program.apply_weights(state_dict)
 
+    onnx_passes.AssignNamesPass()(onnx_program.model)
     common_passes.DeduplicateInitializersPass()(onnx_program.model)
     common_passes.CommonSubexpressionEliminationPass()(onnx_program.model)
 
