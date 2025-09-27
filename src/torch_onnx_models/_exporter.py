@@ -4,6 +4,7 @@ __all__ = ["convert_hf_model"]
 
 import json
 
+import onnx_ir as ir
 import onnx_ir.passes.common as common_passes
 import torch
 from torch._subclasses.fake_tensor import FakeTensorMode
@@ -142,9 +143,19 @@ def convert_hf_model(
 
         onnx_program.apply_weights(state_dict)
 
-    onnx_passes.AssignNamesPass()(onnx_program.model)
-    common_passes.DeduplicateInitializersPass()(onnx_program.model)
-    common_passes.CommonSubexpressionEliminationPass()(onnx_program.model)
+    passes = ir.passes.PassManager(
+        [
+            onnx_passes.AssignNamesPass(),
+            common_passes.DeduplicateInitializersPass(),
+            common_passes.CommonSubexpressionEliminationPass(),
+            common_passes.RemoveUnusedNodesPass(),
+            common_passes.RemoveUnusedFunctionsPass(),
+            common_passes.RemoveUnusedOpsetsPass(),
+            # onnx_passes.RemoveBarrierPass()
+        ]
+    )
+
+    passes(onnx_program.model)
 
     if clear_metadata:
         common_passes.ClearMetadataAndDocStringPass()(onnx_program.model)
