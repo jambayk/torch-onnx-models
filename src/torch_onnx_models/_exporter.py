@@ -45,7 +45,7 @@ def _create_example_inputs(
         ),
         attention_mask=torch.ones(
             (example_batch_size, example_past_sequence_len + example_sequence_len),
-            dtype=torch.int64,
+            dtype=torch.bool,
         ),
         position_ids=torch.arange(
             example_past_sequence_len,

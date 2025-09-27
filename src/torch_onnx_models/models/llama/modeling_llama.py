@@ -101,16 +101,13 @@ class LlamaModel(nn.Module):
 
         hidden_states = inputs_embeds
 
-        attention_bias = components.create_attention_bias(
-            attention_mask=attention_mask,
-            query_length=hidden_states.size(1),
-            dtype=hidden_states.dtype,
-        )
+        # The mask is made causal in the attention layer
+        # TODO(justinchuby): But we may not want to make it causal for other models
 
         for i, decoder_layer in enumerate(self.layers):
             hidden_states = decoder_layer(
                 hidden_states=hidden_states,
-                attention_mask=attention_bias,
+                attention_bias=attention_mask,
                 position_ids=position_ids,
                 past_key=past_key_values[i][0],
                 past_value=past_key_values[i][0],

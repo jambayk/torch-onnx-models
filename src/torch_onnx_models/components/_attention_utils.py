@@ -22,7 +22,7 @@ def create_attention_bias(
     """
     all_indices = attention_mask.cumsum(-1)
     kv_indices = torch.unsqueeze(all_indices, 1)
-    # TODO(justinchuby): I don't know what I am doing here
+    # FIXME(justinchuby): I don't know what I am doing here
     # q_indices = torch.arange(query_length, device=attention_mask.device)
     q_indices = all_indices[:, -query_length:]
     q_indices = torch.unsqueeze(q_indices, -1)
