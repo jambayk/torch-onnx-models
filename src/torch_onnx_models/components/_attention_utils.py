@@ -6,7 +6,7 @@ import torch.nn as nn
 
 # TODO(jambayk): generalize to include sliding window
 def create_attention_bias(
-    *, attention_mask: torch.Tensor, query_length: torch.Tensor, dtype: torch.dtype, mask_value: float = None
+    *, attention_mask: torch.Tensor, query_length: int | torch.SymInt, dtype: torch.dtype, mask_value: float | None = None
 ) -> torch.Tensor:
     """
     Create attention bias for use in attention mechanisms.
@@ -21,15 +21,16 @@ def create_attention_bias(
         torch.Tensor: The attention bias tensor reshaped and cast to the specified dtype of shape (batch_size, 1, query_length, total_length).
     """
     all_indices = attention_mask.cumsum(-1)
-    kv_indices = all_indices[:, None, :]
-    # should we make this not data dependent slicing?
-    # like q_indices = torch.arange(Q, device=attention_mask.device)
-    q_indices = all_indices[:, -query_length:, None]
+    kv_indices = torch.unsqueeze(all_indices, 1)
+    # FIXME(justinchuby): I don't know what I am doing here
+    # q_indices = torch.arange(query_length, device=attention_mask.device)
+    q_indices = all_indices[:, -query_length:]
+    q_indices = torch.unsqueeze(q_indices, -1)
     full_mask = q_indices >= kv_indices
-    full_mask &= attention_mask[:, None, :].to(torch.bool)
+    full_mask = torch.logical_and(torch.unsqueeze(attention_mask, 1).to(torch.bool), full_mask)
     # make the negative value configurable
-    mask_value = torch.finfo(dtype).min if mask_value is None else torch.tensor(mask_value, dtype=dtype)
-    return torch.where(full_mask, 0.0, mask_value)[:, None, :, :]
+    mask_value_tensor = torch.finfo(dtype).min if mask_value is None else torch.tensor(mask_value, dtype=dtype)
+    return torch.unsqueeze(torch.where(full_mask, torch.tensor(0.0, dtype=dtype), mask_value_tensor), 1)
 
 
 # TODO(jambayk): add doc strings for shape of outputs
@@ -71,6 +72,20 @@ def attention(
             present_key (torch.Tensor): The present key tensor for caching of shape (batch_size, kv_num_heads, seq_length + past_length, head_dim).
             present_value (torch.Tensor): The present value tensor for caching of shape (batch_size, kv_num_heads, seq_length + past_length, head_dim).
     """
+    if torch.onnx.is_in_onnx_export():
+        present_key_shape = (past_key.shape[0], past_key.shape[1], past_key.shape[2] + query.shape[1], past_key.shape[3])
+        present_value_shape = (past_value.shape[0], past_value.shape[1], past_value.shape[2] + query.shape[1], past_value.shape[3])
+        return torch.onnx.ops.symbolic_multi_out(
+            "Attention",
+            [query, key, value, bias, past_key, past_value],
+            attrs=dict(kv_num_heads=kv_num_heads, q_num_heads=q_num_heads, scale=scale),
+            dtypes=(query.dtype, key.dtype, value.dtype),
+            shapes=(query.shape, present_key_shape, present_value_shape),
+            version=23,
+        )
+    # TODO(justinchuby): Unfortunately, the meta implementation of torch.onnx.ops.attention
+    # is using torch sdpa which has a strict requirement on the input shapes. Will fix that later
+    # Maybe I set the input shapes wrong
     return torch.onnx.ops.attention(
         query, key, value, bias, past_key, past_value, kv_num_heads=kv_num_heads, q_num_heads=q_num_heads, scale=scale
     )[:3]

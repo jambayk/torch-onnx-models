@@ -4,6 +4,7 @@ import logging
 from typing import Sequence
 
 import torch
+import torch._subclasses.fake_tensor
 from torch import nn
 
 from torch_onnx_models import ArchitectureConfig, components
@@ -38,7 +39,7 @@ class LlamaDecoderLayer(nn.Module):
         self,
         *,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None,
+        attention_bias: torch.Tensor | None,
         position_ids: torch.LongTensor,
         cos_cache: torch.Tensor,
         sin_cache: torch.Tensor,
@@ -48,9 +49,9 @@ class LlamaDecoderLayer(nn.Module):
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
         # Self Attention
-        hidden_states, _ = self.self_attn(
+        hidden_states, _, _ = self.self_attn(
             hidden_states=hidden_states,
-            attention_bias=attention_mask,
+            attention_bias=attention_bias,
             position_ids=position_ids,
             cos_cache=cos_cache,
             sin_cache=sin_cache,
@@ -67,30 +68,9 @@ class LlamaDecoderLayer(nn.Module):
         return hidden_states
 
 
-class LlamaRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-    def __init__(self, config: ArchitectureConfig):
-        super().__init__()
-
-        self.rope_type = config.rope_type or "default"
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
-
-        self.config = config
-
-        # inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
-
-    def forward(self, x, position_ids):
-        # FIXME: What should this look like?
-        components.apply_rope(
-            x=x, cos_cache=None, sin_cache=None, position_ids=position_ids
-        )
-
-
 class LlamaModel(nn.Module):
     def __init__(self, config: ArchitectureConfig):
-        super().__init__(config)
+        super().__init__()
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
@@ -104,47 +84,38 @@ class LlamaModel(nn.Module):
             ]
         )
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = LlamaRotaryEmbedding(config=config)
         self.config = config
+
+        with torch._subclasses.fake_tensor.unset_fake_temporarily():
+            # The buffers need to be concrete tensors
+            cos_cache, sin_cache = components.create_rope_caches(config)
+            self.register_buffer("cos_cache", cos_cache, persistent=False)
+            self.register_buffer("sin_cache", sin_cache, persistent=False)
 
     def forward(
         self,
         *,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
+        input_ids: torch.LongTensor,
+        attention_mask: torch.Tensor,
         position_ids: torch.LongTensor,
-        past_keys: Sequence[torch.Tensor],
-        past_values: Sequence[torch.Tensor],
-        cache_position: torch.LongTensor,
+        past_key_values: Sequence[tuple[torch.Tensor, torch.Tensor]],
     ):
         inputs_embeds = self.embed_tokens(input_ids)
 
-        # TODO: Implement create_causal_mask
-        causal_mask = create_causal_mask(
-            config=self.config,
-            input_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            cache_position=cache_position,
-            past_keys=past_keys,
-            past_values=past_values,
-            position_ids=position_ids,
-        )
-
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+
+        # The mask is made causal in the attention layer
+        # TODO(justinchuby): But we may not want to make it causal for other models
 
         for i, decoder_layer in enumerate(self.layers):
-            # TODO(justinchuby): Compute cos_cache, sin_cache from positions?
-            # FIXME: How should position_embeddings be handled?
             hidden_states = decoder_layer(
-                hidden_states,
-                attention_mask=causal_mask,
+                hidden_states=hidden_states,
+                attention_bias=attention_mask,
                 position_ids=position_ids,
-                past_key=past_keys[i],
-                past_value=past_values[i],
-                cos_cache=cos_cache,
-                sin_cache=sin_cache,
-                position_embeddings=position_embeddings,
+                past_key=past_key_values[i][0],
+                past_value=past_key_values[i][1],
+                cos_cache=self.cos_cache,
+                sin_cache=self.sin_cache,
             )
 
         hidden_states = self.norm(hidden_states)
@@ -153,7 +124,7 @@ class LlamaModel(nn.Module):
 
 class LlamaForCausalLM(nn.Module):
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__()
         self.model = LlamaModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
@@ -162,17 +133,13 @@ class LlamaForCausalLM(nn.Module):
         input_ids: torch.LongTensor,
         attention_mask: torch.Tensor,
         position_ids: torch.LongTensor,
-        past_keys: Sequence[torch.Tensor],
-        past_values: Sequence[torch.Tensor],
-        cache_position: torch.LongTensor,
+        past_key_values: Sequence[tuple[torch.Tensor, torch.Tensor]],
     ):
         hidden_states = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_keys=past_keys,
-            past_values=past_values,
-            cache_position=cache_position,
+            past_key_values=past_key_values,
         )
 
         logits = self.lm_head(hidden_states)
