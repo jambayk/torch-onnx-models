@@ -91,9 +91,15 @@ def convert_hf_model(
         load_weights: Whether to load the pretrained weights from the HuggingFace model.
         clear_metadata: Whether to clear debugging metadata from the ONNX model.
     """
-    from transformers import AutoConfig
+    from huggingface_hub import hf_hub_download
 
-    config = AutoConfig.from_pretrained(model_id)
+    # NOTE: No need to use transformers to load config
+    config_path = hf_hub_download(
+        repo_id=model_id, filename="config.json"
+    )
+    with open(config_path) as f:
+        config = json.load(f)
+
     architecture_config = _configs.ArchitectureConfig.from_transformers(config)
 
     example_inputs, dynamic_shapes = _create_example_inputs(architecture_config, None)
@@ -118,7 +124,6 @@ def convert_hf_model(
 
     if load_weights:
         import safetensors.torch
-        from huggingface_hub import hf_hub_download
 
         # TODO: Support changing local_dir later
         safetensors_index_path = hf_hub_download(
