@@ -4,6 +4,7 @@ import logging
 from typing import Sequence
 
 import torch
+import torch._subclasses.fake_tensor
 from torch import nn
 
 from torch_onnx_models import ArchitectureConfig, components
@@ -85,9 +86,11 @@ class LlamaModel(nn.Module):
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.config = config
 
-        cos_cache, sin_cache = components.create_rope_caches(config)
-        self.register_buffer("cos_cache", cos_cache, persistent=False)
-        self.register_buffer("sin_cache", sin_cache, persistent=False)
+        with torch._subclasses.fake_tensor.unset_fake_temporarily():
+            # The buffers need to be concrete tensors
+            cos_cache, sin_cache = components.create_rope_caches(config)
+            self.register_buffer("cos_cache", cos_cache, persistent=False)
+            self.register_buffer("sin_cache", sin_cache, persistent=False)
 
     def forward(
         self,

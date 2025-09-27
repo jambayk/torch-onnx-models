@@ -120,7 +120,9 @@ def convert_hf_model(
         all_tensor_files = sorted(set(safetensors_index["weight_map"].values()))
         state_dict = {}
         safetensors_paths = []
+        print(f"Downloading {len(all_tensor_files)} safetensors files...")
         for tensor_file in all_tensor_files:
+            # TODO(justinchuby): Concurrent download
             safetensors_paths.append(
                 hf_hub_download(repo_id=model_id, filename=tensor_file)
             )
