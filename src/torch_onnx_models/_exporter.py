@@ -107,6 +107,10 @@ def convert_hf_model(
 
     assert onnx_program is not None
 
+    onnx_program.model.producer_name = "torch_onnx_models"
+    onnx_program.model.producer_version = "0.1.0"
+    onnx_program.model.graph.name = model_id
+
     if load_weights:
         from huggingface_hub import hf_hub_download
         import safetensors.torch
