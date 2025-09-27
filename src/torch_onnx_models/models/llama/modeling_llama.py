@@ -48,7 +48,7 @@ class LlamaDecoderLayer(nn.Module):
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
         # Self Attention
-        hidden_states, _ = self.self_attn(
+        hidden_states, _, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_bias=attention_bias,
             position_ids=position_ids,
@@ -110,7 +110,7 @@ class LlamaModel(nn.Module):
                 attention_bias=attention_mask,
                 position_ids=position_ids,
                 past_key=past_key_values[i][0],
-                past_value=past_key_values[i][0],
+                past_value=past_key_values[i][1],
                 cos_cache=self.cos_cache,
                 sin_cache=self.sin_cache,
             )

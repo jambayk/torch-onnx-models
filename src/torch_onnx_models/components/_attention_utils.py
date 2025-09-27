@@ -72,6 +72,19 @@ def attention(
             present_key (torch.Tensor): The present key tensor for caching of shape (batch_size, kv_num_heads, seq_length + past_length, head_dim).
             present_value (torch.Tensor): The present value tensor for caching of shape (batch_size, kv_num_heads, seq_length + past_length, head_dim).
     """
+    if torch.onnx.is_in_onnx_export():
+        present_key_shape = (past_key.shape[0], past_key.shape[1], past_key.shape[2] + query.shape[1], past_key.shape[3])
+        present_value_shape = (past_value.shape[0], past_value.shape[1], past_value.shape[2] + query.shape[1], past_value.shape[3])
+        return torch.onnx.ops.symbolic_multi_out(
+            "Attention",
+            [query, key, value, bias, past_key, past_value],
+            attrs=dict(kv_num_heads=kv_num_heads, q_num_heads=q_num_heads, scale=scale),
+            dtypes=(query.dtype, key.dtype, value.dtype),
+            shapes=(query.shape, present_key_shape, present_value_shape),
+            version=23,
+        )
+    # TODO(justinchuby): Unfortunately, the meta implementation of torch.onnx.ops.attention
+    # is using torch sdpa which has a strict requirement on the input shapes. Will fix that later
     return torch.onnx.ops.attention(
         query, key, value, bias, past_key, past_value, kv_num_heads=kv_num_heads, q_num_heads=q_num_heads, scale=scale
     )[:3]

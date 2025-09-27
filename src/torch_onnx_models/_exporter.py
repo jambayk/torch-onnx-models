@@ -3,6 +3,7 @@ from __future__ import annotations
 import torch
 from torch._subclasses.fake_tensor import FakeTensorMode
 from transformers import AutoConfig
+import onnx_ir.passes.common as common_passes
 
 from torch_onnx_models import _configs
 from torch_onnx_models.models.llama.modeling_llama import LlamaForCausalLM
@@ -89,7 +90,11 @@ def _convert_hf_model(model_id: str = "meta-llama/Llama-2-7b-hf"):
         dynamic_shapes=dynamic_shapes,
         dynamo=True,
         optimize=False,
+        opset_version=23,
     )
+
+    common_passes.DeduplicateInitializersPass()(onnx_program.model)
+    common_passes.CommonSubexpressionEliminationPass()(onnx_program.model)
 
     onnx_program.save("llama2_7b.onnx", include_initializers=False)
 
