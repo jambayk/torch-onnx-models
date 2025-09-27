@@ -78,13 +78,14 @@ def _create_example_inputs(
 
 
 def convert_hf_model(
-    model_id: str = "meta-llama/Llama-2-7b-hf", load_weights: bool = True
+    model_id: str = "meta-llama/Llama-2-7b-hf", load_weights: bool = True, clear_metadata: bool = False
 ) -> torch.onnx.ONNXProgram:
     """Convert a HuggingFace model to ONNX.
 
     Args:
         model_id: The model ID on HuggingFace Hub.
         load_weights: Whether to load the pretrained weights from the HuggingFace model.
+        clear_metadata: Whether to clear debugging metadata from the ONNX model.
     """
     from transformers import AutoConfig
 
@@ -106,6 +107,10 @@ def convert_hf_model(
     )
 
     assert onnx_program is not None
+
+    onnx_program.model.producer_name = "torch_onnx_models"
+    onnx_program.model.producer_version = "0.1.0"
+    onnx_program.model.graph.name = model_id
 
     if load_weights:
         from huggingface_hub import hf_hub_download
@@ -136,5 +141,8 @@ def convert_hf_model(
 
     common_passes.DeduplicateInitializersPass()(onnx_program.model)
     common_passes.CommonSubexpressionEliminationPass()(onnx_program.model)
+
+    if clear_metadata:
+        common_passes.ClearMetadataAndDocStringPass()(onnx_program.model)
 
     return onnx_program
