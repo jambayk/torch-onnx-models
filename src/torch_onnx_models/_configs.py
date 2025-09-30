@@ -29,6 +29,9 @@ SUPPORTED_ARCHITECTURES = {
 }
 
 
+DEFAULT_INT = -42
+
+
 # self.vocab_size = vocab_size
 # self.max_position_embeddings = max_position_embeddings
 # self.hidden_size = hidden_size
@@ -61,15 +64,15 @@ SUPPORTED_ARCHITECTURES = {
 @dataclasses.dataclass
 class ArchitectureConfig:
     # Config from transformers
-    head_dim: int = -42
-    num_attention_heads: int = -42
-    num_key_value_heads: int = -42
-    num_hidden_layers: int = -42
-    vocab_size: int = -42
-    hidden_size: int = -42
-    intermediate_size: int = -42
+    head_dim: int = DEFAULT_INT
+    num_attention_heads: int = DEFAULT_INT
+    num_key_value_heads: int = DEFAULT_INT
+    num_hidden_layers: int = DEFAULT_INT
+    vocab_size: int = DEFAULT_INT
+    hidden_size: int = DEFAULT_INT
+    intermediate_size: int = DEFAULT_INT
     hidden_act: str | None = None
-    pad_token_id: int = -42
+    pad_token_id: int = DEFAULT_INT
     rms_norm_eps: float = 1e-6
     attention_bias: bool = False
     mlp_bias: bool = False
@@ -77,7 +80,7 @@ class ArchitectureConfig:
     # Rotary embedding config
     rope_type: str = "default"
     rope_theta: float = 10_000.0
-    max_position_embeddings: int = -42
+    max_position_embeddings: int = DEFAULT_INT
     partial_rotary_factor: float = 1.0  # 1.0 means no partial RoPE
 
     @classmethod
