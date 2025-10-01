@@ -1,18 +1,20 @@
 from __future__ import annotations
-import warnings
 
 __all__ = ["convert_hf_model"]
 
 import json
+import logging
 
 import onnx_ir as ir
 import onnx_ir.passes.common as common_passes
-from onnx_ir import tensor_adapters
 import torch
+from onnx_ir import tensor_adapters
 from torch._subclasses.fake_tensor import FakeTensorMode
 
 from torch_onnx_models import _configs, onnx_passes
 from torch_onnx_models.models.llama.modeling_llama import LlamaForCausalLM
+
+logger = logging.getLogger(__name__)
 
 
 def _create_example_inputs(
@@ -97,10 +99,7 @@ def apply_weights(model: ir.Model, state_dict: dict[str, torch.Tensor]):
                 tensor, name
             )
         else:
-            warnings.warn(
-                f"Weight '{name}' not found in the model. Skipped applying.",
-                stacklevel=1,
-            )
+            logger.warning(f"Weight '{name}' not found in the model. Skipped applying.")
 
 
 @torch.no_grad()
