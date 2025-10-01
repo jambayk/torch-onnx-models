@@ -4,6 +4,7 @@ __all__ = ["convert_hf_model"]
 
 import json
 
+import os
 import onnx_ir as ir
 import onnx_ir.passes.common as common_passes
 import torch
@@ -94,9 +95,7 @@ def convert_hf_model(
     from huggingface_hub import hf_hub_download
 
     # NOTE: No need to use transformers to load config
-    config_path = hf_hub_download(
-        repo_id=model_id, filename="config.json"
-    )
+    config_path = hf_hub_download(repo_id=model_id, filename="config.json")
     with open(config_path) as f:
         config = json.load(f)
 
@@ -124,6 +123,7 @@ def convert_hf_model(
 
     if load_weights:
         import safetensors.torch
+        import onnx_safetensors
 
         # TODO: Support changing local_dir later
         safetensors_index_path = hf_hub_download(
@@ -132,7 +132,6 @@ def convert_hf_model(
         with open(safetensors_index_path) as f:
             safetensors_index = json.load(f)
         all_tensor_files = sorted(set(safetensors_index["weight_map"].values()))
-        state_dict = {}
         safetensors_paths = []
         print(f"Downloading {len(all_tensor_files)} safetensors files...")
         for tensor_file in all_tensor_files:
@@ -140,13 +139,14 @@ def convert_hf_model(
             safetensors_paths.append(
                 hf_hub_download(repo_id=model_id, filename=tensor_file)
             )
+        initializers = {}
         for path in safetensors_paths:
-            state_dict.update(safetensors.torch.load_file(path))
-            # TODO(justinchuby): Allow using safetensors directly as weights
+            dir, filename = os.path.split(path)
+            initializers.update(onnx_safetensors.read_safetensors(location=filename, base_dir=dir))
+
             # TODO(justinchuby): Validate missing keys
             # TODO(justinchuby): Handle dtype conversions
-
-        onnx_program.apply_weights(state_dict)
+        onnx_safetensors.apply_tensors(onnx_program.model, initializers, cast=True)
 
     passes = ir.passes.PassManager(
         [
