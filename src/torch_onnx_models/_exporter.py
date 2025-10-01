@@ -86,20 +86,31 @@ def _create_example_inputs(
 def apply_weights(model: ir.Model, state_dict: dict[str, torch.Tensor]):
     """Apply weights from a state dict to an ONNX model."""
     for name, tensor in state_dict.items():
-        if name in model.graph.initializers:
-            target_dtype = tensor_adapters.to_torch_dtype(
-                model.graph.initializers[name].dtype
+        if name not in model.graph.initializers:
+            logger.warning(f"Weight '{name}' not found in the model. Skipped applying.")
+            continue
+
+        onnx_dtype = model.graph.initializers[name].dtype
+        assert onnx_dtype is not None
+        target_dtype = tensor_adapters.to_torch_dtype(onnx_dtype)
+        if tensor.dtype != target_dtype:
+            print(
+                f"Converting weight '{name}' from {tensor.dtype} to {target_dtype}."
             )
-            if tensor.dtype != target_dtype:
-                print(
-                    f"Converting weight '{name}' from {tensor.dtype} to {target_dtype}."
-                )
+
+            def tensor_func(tensor=tensor, target_dtype=target_dtype, name=name):
                 tensor = tensor.to(target_dtype)
-            model.graph.initializers[name].const_value = tensor_adapters.TorchTensor(
-                tensor, name
+                return tensor_adapters.TorchTensor(tensor, name=name)
+
+            ir_tensor = ir.LazyTensor(
+                tensor_func,
+                dtype=onnx_dtype,
+                shape=ir.Shape(tensor.shape),
+                name=name,
             )
         else:
-            logger.warning(f"Weight '{name}' not found in the model. Skipped applying.")
+            ir_tensor = tensor_adapters.TorchTensor(tensor, name)
+        model.graph.initializers[name].const_value = ir_tensor
 
 
 @torch.no_grad()
