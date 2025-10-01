@@ -99,7 +99,6 @@ def apply_weights(model: ir.Model, state_dict: dict[str, torch.Tensor]):
         else:
             warnings.warn(
                 f"Weight '{name}' not found in the model. Skipped applying.",
-                category=torch.onnx.errors.OnnxExporterWarning,
                 stacklevel=1,
             )
 
