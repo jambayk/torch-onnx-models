@@ -3,14 +3,18 @@ from __future__ import annotations
 __all__ = ["convert_hf_model"]
 
 import json
+import logging
 
 import onnx_ir as ir
 import onnx_ir.passes.common as common_passes
 import torch
+from onnx_ir import tensor_adapters
 from torch._subclasses.fake_tensor import FakeTensorMode
 
 from torch_onnx_models import _configs, onnx_passes
 from torch_onnx_models.models.llama.modeling_llama import LlamaForCausalLM
+
+logger = logging.getLogger(__name__)
 
 
 def _create_example_inputs(
@@ -79,6 +83,26 @@ def _create_example_inputs(
     return example_inputs, dynamic_shapes
 
 
+def apply_weights(model: ir.Model, state_dict: dict[str, torch.Tensor]):
+    """Apply weights from a state dict to an ONNX model."""
+    for name, tensor in state_dict.items():
+        if name in model.graph.initializers:
+            target_dtype = tensor_adapters.to_torch_dtype(
+                model.graph.initializers[name].dtype
+            )
+            if tensor.dtype != target_dtype:
+                print(
+                    f"Converting weight '{name}' from {tensor.dtype} to {target_dtype}."
+                )
+                tensor = tensor.to(target_dtype)
+            model.graph.initializers[name].const_value = tensor_adapters.TorchTensor(
+                tensor, name
+            )
+        else:
+            logger.warning(f"Weight '{name}' not found in the model. Skipped applying.")
+
+
+@torch.no_grad()
 def convert_hf_model(
     model_id: str = "meta-llama/Llama-2-7b-hf",
     load_weights: bool = True,
@@ -94,9 +118,7 @@ def convert_hf_model(
     from huggingface_hub import hf_hub_download
 
     # NOTE: No need to use transformers to load config
-    config_path = hf_hub_download(
-        repo_id=model_id, filename="config.json"
-    )
+    config_path = hf_hub_download(repo_id=model_id, filename="config.json")
     with open(config_path) as f:
         config = json.load(f)
 
@@ -146,7 +168,7 @@ def convert_hf_model(
             # TODO(justinchuby): Validate missing keys
             # TODO(justinchuby): Handle dtype conversions
 
-        onnx_program.apply_weights(state_dict)
+        apply_weights(onnx_program.model, state_dict)
 
     passes = ir.passes.PassManager(
         [
