@@ -96,9 +96,12 @@ def apply_weights(model: ir.Model, state_dict: dict[str, torch.Tensor]):
                 print(
                     f"Converting weight '{name}' from {tensor.dtype} to {target_dtype}."
                 )
-                tensor = tensor.to(target_dtype)
+                new_tensor = tensor.to(target_dtype)
+                del tensor
+            else:
+                new_tensor = tensor
             model.graph.initializers[name].const_value = tensor_adapters.TorchTensor(
-                tensor, name
+                new_tensor, name
             )
         else:
             logger.warning(f"Weight '{name}' not found in the model. Skipped applying.")
