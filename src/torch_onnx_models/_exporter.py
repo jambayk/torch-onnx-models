@@ -89,20 +89,27 @@ def apply_weights(model: ir.Model, state_dict: dict[str, torch.Tensor]):
         # tensor will be garbage collected after dtype conversion to save memory
         name, tensor = state_dict.popitem()
         if name in model.graph.initializers:
-            target_dtype = tensor_adapters.to_torch_dtype(
-                model.graph.initializers[name].dtype
-            )
+            onnx_dtype = model.graph.initializers[name].dtype
+            assert onnx_dtype is not None
+            target_dtype = tensor_adapters.to_torch_dtype(onnx_dtype)
             if tensor.dtype != target_dtype:
                 print(
                     f"Converting weight '{name}' from {tensor.dtype} to {target_dtype}."
                 )
-                new_tensor = tensor.to(target_dtype)
-                del tensor
+
+                def tensor_func(tensor=tensor, target_dtype=target_dtype, name=name):
+                    tensor = tensor.to(target_dtype)
+                    return tensor_adapters.TorchTensor(tensor, name=name)
+
+                ir_tensor = ir.LazyTensor(
+                    tensor_func,
+                    dtype=onnx_dtype,
+                    shape=ir.Shape(tensor.shape),
+                    name=name,
+                )
             else:
-                new_tensor = tensor
-            model.graph.initializers[name].const_value = tensor_adapters.TorchTensor(
-                new_tensor, name
-            )
+                ir_tensor = tensor_adapters.TorchTensor(tensor, name)
+            model.graph.initializers[name].const_value = ir_tensor
         else:
             logger.warning(f"Weight '{name}' not found in the model. Skipped applying.")
 
