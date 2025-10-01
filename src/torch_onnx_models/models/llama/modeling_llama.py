@@ -89,8 +89,9 @@ class LlamaModel(nn.Module):
         with torch._subclasses.fake_tensor.unset_fake_temporarily():
             # The buffers need to be concrete tensors
             cos_cache, sin_cache = components.create_rope_caches(config)
-            self.register_buffer("cos_cache", cos_cache, persistent=False)
-            self.register_buffer("sin_cache", sin_cache, persistent=False)
+            # Set persistent to True so they are saved in the state dict
+            self.register_buffer("cos_cache", cos_cache, persistent=True)
+            self.register_buffer("sin_cache", sin_cache, persistent=True)
 
     def forward(
         self,
