@@ -174,9 +174,7 @@ def convert_hf_model(
             )
         for path in safetensors_paths:
             state_dict.update(safetensors.torch.load_file(path))
-            # TODO(justinchuby): Allow using safetensors directly as weights
             # TODO(justinchuby): Validate missing keys
-            # TODO(justinchuby): Handle dtype conversions
 
         apply_weights(onnx_program.model, state_dict)
 
