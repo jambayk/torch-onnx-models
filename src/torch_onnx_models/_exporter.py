@@ -170,7 +170,7 @@ def convert_hf_model(
             # TODO(justinchuby): Validate missing keys
             # TODO(justinchuby): Handle dtype conversions
 
-        onnx_program.apply_weights(state_dict)
+        apply_weights(onnx_program.model, state_dict)
 
     passes = ir.passes.PassManager(
         [
