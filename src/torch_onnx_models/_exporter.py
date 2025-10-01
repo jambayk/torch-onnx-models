@@ -85,7 +85,9 @@ def _create_example_inputs(
 
 def apply_weights(model: ir.Model, state_dict: dict[str, torch.Tensor]):
     """Apply weights from a state dict to an ONNX model."""
-    for name, tensor in state_dict.items():
+    while state_dict:
+        # tensor will be garbage collected after dtype conversion to save memory
+        name, tensor = state_dict.popitem()
         if name in model.graph.initializers:
             target_dtype = tensor_adapters.to_torch_dtype(
                 model.graph.initializers[name].dtype
