@@ -28,7 +28,19 @@ class AssignNamesPass(ir.passes.InPlacePass):
                         and output.name is not None
                         and output.name != ""
                     ):
-                        scoped_name = "/".join((*name_scopes, output.name))
+                        # Remove common prefixes between consecutive scopes
+                        processed_scopes = []
+                        for i, scope in enumerate(name_scopes):
+                            if i == 0:
+                                processed_scopes.append(scope)
+                            else:
+                                prev_scope = name_scopes[i - 1]
+                                processed_scopes.append(
+                                    scope.removeprefix(prev_scope).lstrip(".")
+                                )
+                        processed_scopes.append(output.name)
+
+                        scoped_name = "/".join(processed_scopes)
                         logger.debug("Renaming %r to %r", output.name, scoped_name)
                         output.name = scoped_name
                         modified = True
