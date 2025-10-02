@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import torch
 from torch import nn
-from torch_onnx_models.components._attention_utils import attention, attention_decomposed
+from torch_onnx_models.components._attention_utils import attention, attention_decomposed, attention_contrib_mha
 from torch_onnx_models.components._rotary_embedding_utils import apply_rotary_pos_emb, apply_rotary_pos_emb_decomposed
 from torch_onnx_models import _configs
 
@@ -49,7 +49,8 @@ class Attention(nn.Module):
         )
 
         # attention_func = attention
-        attention_func = attention_decomposed
+        # attention_func = attention_decomposed
+        attention_func = attention_contrib_mha
         # print(f"using attention func {attention_func.__name__}")
         attn_output, present_key, present_value = attention_func(
             query=query_states,
