@@ -12,7 +12,7 @@ from onnx_ir import tensor_adapters
 from torch._subclasses.fake_tensor import FakeTensorMode
 
 from torch_onnx_models import _configs, onnx_passes
-from torch_onnx_models.models.llama.modeling_llama import LlamaForCausalLM
+from torch_onnx_models.components._model import CausalLMModel
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +41,16 @@ def _create_example_inputs(
             for _ in range(num_hidden_layers)
         ],
     }
+    input_names = [
+        "input_ids",
+        "attention_mask",
+        "position_ids",
+        *[name for i in range(num_hidden_layers) for name in (f"past_key_values.{i}.key", f"past_key_values.{i}.value")],
+    ]
+    output_names = [
+        "logits",
+        *[name for i in range(num_hidden_layers) for name in (f"present.{i}.key", f"present.{i}.value")],
+    ]
 
     example_batch_size = 2
     example_past_sequence_len = 2
@@ -54,7 +64,7 @@ def _create_example_inputs(
         ),
         attention_mask=torch.ones(
             (example_batch_size, example_past_sequence_len + example_sequence_len),
-            dtype=torch.bool,
+            dtype=torch.int64,
         ),
         position_ids=torch.arange(
             example_past_sequence_len,
@@ -80,7 +90,7 @@ def _create_example_inputs(
         ],
     )
 
-    return example_inputs, dynamic_shapes
+    return example_inputs, dynamic_shapes, input_names, output_names
 
 
 def apply_weights(model: ir.Model, state_dict: dict[str, torch.Tensor]):
@@ -115,7 +125,7 @@ def apply_weights(model: ir.Model, state_dict: dict[str, torch.Tensor]):
 
 @torch.no_grad()
 def convert_hf_model(
-    model_id: str = "meta-llama/Llama-2-7b-hf",
+    model_id: str = "meta-llama/Llama-3.2-1B-Instruct",
     load_weights: bool = True,
     clear_metadata: bool = False,
 ) -> torch.onnx.ONNXProgram:
@@ -133,15 +143,17 @@ def convert_hf_model(
     config = transformers.AutoConfig.from_pretrained(model_id)
     architecture_config = _configs.ArchitectureConfig.from_transformers(config)
 
-    example_inputs, dynamic_shapes = _create_example_inputs(architecture_config, None)
+    example_inputs, dynamic_shapes, input_names, output_names = _create_example_inputs(architecture_config, None)
 
     with FakeTensorMode():
-        model = LlamaForCausalLM(architecture_config)
+        model = CausalLMModel(architecture_config)
 
     onnx_program = torch.onnx.export(
         model,
         kwargs=example_inputs,
         dynamic_shapes=dynamic_shapes,
+        input_names=input_names,
+        output_names=output_names,
         dynamo=True,
         optimize=False,
         opset_version=23,
@@ -158,12 +170,19 @@ def convert_hf_model(
         from huggingface_hub import hf_hub_download
 
         # TODO: Support changing local_dir later
-        safetensors_index_path = hf_hub_download(
-            repo_id=model_id, filename="model.safetensors.index.json"
-        )
-        with open(safetensors_index_path) as f:
-            safetensors_index = json.load(f)
-        all_tensor_files = sorted(set(safetensors_index["weight_map"].values()))
+        try:
+            safetensors_index_path = hf_hub_download(
+                repo_id=model_id, filename="model.safetensors.index.json"
+            )
+            with open(safetensors_index_path) as f:
+                safetensors_index = json.load(f)
+            all_tensor_files = sorted(set(safetensors_index["weight_map"].values()))
+        except Exception as e:
+            if "Entry Not Found" in str(e):
+                # Fallback to single file
+                all_tensor_files = ["model.safetensors"]
+            else:
+                raise e
         state_dict = {}
         safetensors_paths = []
         print(f"Downloading {len(all_tensor_files)} safetensors files...")
@@ -175,6 +194,16 @@ def convert_hf_model(
         for path in safetensors_paths:
             state_dict.update(safetensors.torch.load_file(path))
             # TODO(justinchuby): Validate missing keys
+        # can we make this better? at least not hardcode the weight names?
+        if config.tie_word_embeddings:
+            if "lm_head.weight" in state_dict:
+                state_dict["model.embed_tokens.weight"] = state_dict[
+                    "lm_head.weight"
+                ]
+            elif "model.embed_tokens.weight" in state_dict:
+                state_dict["lm_head.weight"] = state_dict[
+                    "model.embed_tokens.weight"
+                ]
 
         apply_weights(onnx_program.model, state_dict)
 

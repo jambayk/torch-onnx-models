@@ -49,7 +49,7 @@ class ArchitectureConfig:
     # Rotary embedding config
     rope_type: str = "default"
     rope_theta: float = 10_000.0
-    rope_scaling: dict | None = None  # Not supported yet
+    rope_scaling: dict | None = None
     partial_rotary_factor: float = 1.0  # 1.0 means no partial RoPE
 
     attention_bias: bool = False
@@ -83,10 +83,12 @@ class ArchitectureConfig:
             rms_norm_eps=(getattr(config, "rms_norm_eps", 1e-6)),
             attention_bias=(getattr(config, "add_bias_kv", False)),
             mlp_bias=(getattr(config, "use_mlp_bias", False)),
-            rope_type="default",  # only support default for now
+            # how much older transformers versions are we supporting?
+            rope_type=(config.rope_scaling.get("rope_type") if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict) else "default"),
             rope_theta=(getattr(config, "rope_theta", 10_000.0)),
-            max_position_embeddings=config.max_position_embeddings,
+            rope_scaling=(getattr(config, "rope_scaling", None)),
             partial_rotary_factor=(getattr(config, "partial_rotary_factor", 1.0)),
+            max_position_embeddings=config.max_position_embeddings,
         )
 
         return cls(**options)

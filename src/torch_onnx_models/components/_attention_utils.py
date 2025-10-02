@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import torch
-import torch.nn as nn
+from torch import nn
 
 
 # TODO(jambayk): generalize to include sliding window
@@ -20,17 +20,18 @@ def create_attention_bias(
     Returns:
         torch.Tensor: The attention bias tensor reshaped and cast to the specified dtype of shape (batch_size, 1, query_length, total_length).
     """
+    assert attention_mask.dim() == 2, "attention_mask should be of shape (batch_size, total_length)"
     all_indices = attention_mask.cumsum(-1)
     kv_indices = torch.unsqueeze(all_indices, 1)
-    # FIXME(justinchuby): I don't know what I am doing here
-    # q_indices = torch.arange(query_length, device=attention_mask.device)
+    # should we make this not data dependent slicing?
+    # like q_indices = torch.arange(query_length, device=attention_mask.device)
     q_indices = all_indices[:, -query_length:]
     q_indices = torch.unsqueeze(q_indices, -1)
     full_mask = q_indices >= kv_indices
     full_mask = torch.logical_and(torch.unsqueeze(attention_mask, 1).to(torch.bool), full_mask)
     # make the negative value configurable
-    mask_value_tensor = torch.finfo(dtype).min if mask_value is None else torch.tensor(mask_value, dtype=dtype)
-    return torch.unsqueeze(torch.where(full_mask, torch.tensor(0.0, dtype=dtype), mask_value_tensor), 1)
+    mask_value = torch.finfo(dtype).min if mask_value is None else mask_value
+    return torch.unsqueeze(torch.where(full_mask, 0.0, mask_value), 1)
 
 
 # TODO(jambayk): add doc strings for shape of outputs
@@ -45,6 +46,7 @@ def attention(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
+    # rename back to attention_mask?
     bias: torch.Tensor,
     past_key: torch.Tensor | None = None,
     past_value: torch.Tensor | None = None,
@@ -198,6 +200,7 @@ def attention_decomposed(
     )
 
     attn_weight = torch.matmul(query, key.transpose(2, 3)) * scale
+    print(attn_weight.shape, bias.shape)
     attn_weight = attn_weight + bias
 
     attn_weights = nn.functional.softmax(attn_weight, dim=-1)
