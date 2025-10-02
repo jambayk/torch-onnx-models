@@ -3,7 +3,7 @@ from __future__ import annotations
 import torch
 from torch import nn
 from torch_onnx_models.components._attention_utils import attention, attention_decomposed, attention_contrib_mha
-from torch_onnx_models.components._rotary_embedding_utils import apply_rope, apply_rope_decomposed, apply_rope_contrib
+from torch_onnx_models.components._rotary_embedding_utils import apply_rotary_pos_emb, apply_rotary_pos_emb_decomposed
 from torch_onnx_models import _configs
 
 class Attention(nn.Module):
@@ -27,51 +27,41 @@ class Attention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_bias: torch.Tensor,
-        position_ids: torch.Tensor,
-        cos_cache: torch.Tensor,
-        sin_cache: torch.Tensor,
-        past_key: torch.Tensor | None,
-        past_value: torch.Tensor | None,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        past_key_value: tuple[torch.Tensor, torch.Tensor] | None = None,
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
-        # just for testing
-        rope_func = apply_rope
-        # rope_func = apply_rope_decomposed
-        # rope_func = apply_rope_contrib
-        print("Using rope func:", rope_func.__name__)
+        rope_func = apply_rotary_pos_emb
+        # rope_func = apply_rotary_pos_emb_decomposed
+        # print(f"using rope func {rope_func.__name__}")
         query_states = rope_func(
             x=query_states,
-            cos_cache=cos_cache,
-            sin_cache=sin_cache,
-            position_ids=position_ids,
+            position_embeddings=position_embeddings,
             num_heads=self.num_attention_heads,
         )
         key_states = rope_func(
             x=key_states,
-            cos_cache=cos_cache,
-            sin_cache=sin_cache,
-            position_ids=position_ids,
+            position_embeddings=position_embeddings,
             num_heads=self.num_key_value_heads,
         )
 
-        attention_func = attention
+        # attention_func = attention
         # attention_func = attention_decomposed
-        # attention_func = attention_contrib_mha
-        print("Using attention func:", attention_func.__name__)
+        attention_func = attention_contrib_mha
+        # print(f"using attention func {attention_func.__name__}")
         attn_output, present_key, present_value = attention_func(
             query=query_states,
             key=key_states,
             value=value_states,
             bias=attention_bias,
-            past_key=past_key,
-            past_value=past_value,
+            past_key=past_key_value[0] if past_key_value is not None else None,
+            past_value=past_key_value[1] if past_key_value is not None else None,
             q_num_heads=self.num_attention_heads,
             kv_num_heads=self.num_key_value_heads,
             scale=self.scaling,
         )
-
         attn_output = self.o_proj(attn_output)
-        return attn_output, present_key, present_value
+        return attn_output, (present_key, present_value)

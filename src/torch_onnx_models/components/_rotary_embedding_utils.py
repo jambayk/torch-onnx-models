@@ -1,77 +1,42 @@
 from __future__ import annotations
 
 import torch
-from torch_onnx_models import _configs
 
+def get_rotary_pos_emb(position_ids: torch.Tensor, cos_cache: torch.Tensor, sin_cache: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Retrieve the cosine and sine positional embeddings based on the provided position IDs.
 
-def create_rope_caches(
-    config: _configs.ArchitectureConfig,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    # Initialize rope frequencies using the utility function
+    Args:
+        position_ids (torch.Tensor): The position IDs tensor of shape (batch_size, seq_length).
+        cos_cache (torch.Tensor): The cosine cache tensor of shape (max_position_embeddings, head_dim).
+        sin_cache (torch.Tensor): The sine cache tensor of shape (max_position_embeddings, head_dim).
 
-    inv_freq, attention_factor = _initialize_rope_freqs(config=config)
-
-    # Create position indices for all positions up to max_position_embeddings
-    max_seq_len = config.max_position_embeddings
-    # TODO: position_scale
-    positions = torch.arange(max_seq_len, dtype=torch.float32)
-
-    # Compute the angles for each position and frequency
-    # positions: [max_seq_len], inv_freq: [dim//2] -> angles: [max_seq_len, dim//2]
-    angles = torch.outer(positions, inv_freq)
-
-    # Precompute cos and sin caches
-    cos_cache = torch.cos(angles) * attention_factor
-    sin_cache = torch.sin(angles) * attention_factor
-    return cos_cache, sin_cache
-
-
-def _initialize_rope_freqs(
-    config: _configs.ArchitectureConfig,
-) -> tuple[torch.Tensor, float]:
-    if config.rope_type == "default":
-        return _compute_default_rope_parameters(config)
-    raise ValueError(f"Unsupported rope_type: {config.rope_type}")
-
-
-def _compute_default_rope_parameters(
-    config: _configs.ArchitectureConfig,
-) -> tuple[torch.Tensor, float]:
-    # https://github.com/huggingface/transformers/blob/6dc9ed87a02db8b4ecc26a5e98596cd2bba380b5/src/transformers/modeling_rope_utils.py#L92
-    base = config.rope_theta
-    partial_rotary_factor = config.partial_rotary_factor
-    head_dim = config.head_dim
-    dim = int(head_dim * partial_rotary_factor)
-
-    attention_factor = 1.0  # Unused in this type of RoPE
-
-    # Compute the inverse frequencies
-    inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-    return inv_freq, attention_factor
-
+    Returns:
+        tuple[torch.Tensor, torch.Tensor]: A tuple containing the cosine and sine embeddings,
+                                           each of shape (batch_size, seq_length, head_dim).
+    """
+    return cos_cache[position_ids], sin_cache[position_ids]
 
 # TODO(jambayk): add support for interleaved format if needed
 # requires torch 2.9+
-def apply_rope(
-    x: torch.Tensor,
+# this can actually be fused with get_rotary_pos_emb as well but we keep them separate for clarity
+# as well as to align the model architecture with transformers
+# is it really worth separating this from get_rotary_pos_emb? shape doesn't match transformers
+# where position embeddings are (batch_size, seq_length, rotary_embedding_dim)
+def apply_rotary_pos_emb(
     *,
-    cos_cache: torch.Tensor,
-    sin_cache: torch.Tensor,
-    position_ids: torch.Tensor,
+    x: torch.Tensor,
+    position_embeddings: tuple[torch.Tensor, torch.Tensor],
     num_heads: int,
     rotary_embedding_dim: int = 0,
 ) -> torch.Tensor:
     """
     Apply Rotary Positional Embedding (RoPE) to the input hidden states.
 
-    This function modifies the input hidden states by applying the RoPE transformation
-    using the provided cosine and sine caches based on the given position IDs.
-
     Args:
         x (torch.Tensor): The input tensor of shape (batch_size, seq_length, num_heads * head_dim).
-        cos_cache (torch.Tensor): The cosine cache tensor of shape (max_position_embeddings, rotary_embedding_dim // 2).
-        sin_cache (torch.Tensor): The sine cache tensor of shape (max_position_embeddings, rotary_embedding_dim // 2).
-        position_ids (torch.Tensor): The position IDs tensor of shape (batch_size, seq_length).
+        position_embeddings (tuple[torch.Tensor, torch.Tensor]): The cosine and sine position embeddings.
+            Each tensor should be of shape (batch_size, seq_length, rotary_embedding_dim // 2).
         num_heads (int): The number of attention heads.
         rotary_embedding_dim (int): The dimension of the rotary embeddings for partial embedding (default is 0 equivalent to head_dim, meaning full embedding).
 
@@ -80,20 +45,16 @@ def apply_rope(
     """
     return torch.onnx.ops.rotary_embedding(
         x,
-        cos_cache,
-        sin_cache,
-        position_ids=position_ids,
+        *position_embeddings,
         rotary_embedding_dim=rotary_embedding_dim,
         num_heads=num_heads,
     )
 
 
-def apply_rope_decomposed(
+def apply_rotary_pos_emb_decomposed(
     *,
     x: torch.Tensor,
-    cos_cache: torch.Tensor,
-    sin_cache: torch.Tensor,
-    position_ids: torch.Tensor,
+    position_embeddings: tuple[torch.Tensor, torch.Tensor],
     num_heads: int,
     rotary_embedding_dim: int = 0,
 ) -> torch.Tensor:
@@ -105,9 +66,7 @@ def apply_rope_decomposed(
 
     Args:
         x (torch.Tensor): The input tensor of shape (batch_size, seq_length, num_heads * head_dim).
-        cos_cache (torch.Tensor): The cosine cache tensor of shape (max_position_embeddings, rotary_embedding_dim // 2).
-        sin_cache (torch.Tensor): The sine cache tensor of shape (max_position_embeddings, rotary_embedding_dim // 2).
-        position_ids (torch.Tensor): The position IDs tensor of shape (batch_size, seq_length).
+        position_embeddings (tuple[torch.Tensor, torch.Tensor]): The cosine and sine position embeddings.
         num_heads (int): The number of attention heads.
         rotary_embedding_dim (int): The dimension of the rotary embeddings for partial embedding (default is 0 equivalent to head_dim, meaning full embedding).
 
@@ -122,8 +81,9 @@ def apply_rope_decomposed(
     else:
         x_rot, x_pass = x[..., :rotary_embedding_dim], x[..., rotary_embedding_dim:]
 
-    cos = cos_cache[position_ids].unsqueeze(2)
-    sin = sin_cache[position_ids].unsqueeze(2)
+    cos, sin = position_embeddings
+    cos = cos.unsqueeze(2)  # (batch_size, seq_length, 1, head_dim)
+    sin = sin.unsqueeze(2)  # (batch_size, seq_length, 1, head_dim)
 
     x1, x2 = x_rot.chunk(2, dim=-1)
 
@@ -137,8 +97,8 @@ def apply_rope_decomposed(
 
     return x_applied.reshape(batch_size, seq_length, -1)
 
-
-def apply_rope_contrib(
+# this is a fused version of get_rotary_pos_emb + apply_rotary_pos_emb
+def fused_rotary_emb_contrib(
     *,
     x: torch.Tensor,
     cos_cache: torch.Tensor,
