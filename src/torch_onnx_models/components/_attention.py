@@ -34,18 +34,24 @@ class Attention(nn.Module):
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
-        query_states = apply_rotary_pos_emb_decomposed(
+        rope_func = apply_rotary_pos_emb
+        # rope_func = apply_rotary_pos_emb_decomposed
+        # print(f"using rope func {rope_func.__name__}")
+        query_states = rope_func(
             x=query_states,
             position_embeddings=position_embeddings,
             num_heads=self.num_attention_heads,
         )
-        key_states = apply_rotary_pos_emb_decomposed(
+        key_states = rope_func(
             x=key_states,
             position_embeddings=position_embeddings,
             num_heads=self.num_key_value_heads,
         )
 
-        attn_output, present_key, present_value = attention_decomposed(
+        # attention_func = attention
+        attention_func = attention_decomposed
+        # print(f"using attention func {attention_func.__name__}")
+        attn_output, present_key, present_value = attention_func(
             query=query_states,
             key=key_states,
             value=value_states,

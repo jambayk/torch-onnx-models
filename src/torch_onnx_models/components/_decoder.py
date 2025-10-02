@@ -36,7 +36,6 @@ class DecoderLayer(nn.Module):
             position_embeddings=position_embeddings,
             past_key_value=past_key_value,
         )
-        # print(attn_output)
         hidden_states = residual + attn_output
 
         residual = hidden_states

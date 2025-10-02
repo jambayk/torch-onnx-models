@@ -200,8 +200,18 @@ def attention_decomposed(
     )
 
     attn_weight = torch.matmul(query, key.transpose(2, 3)) * scale
-    print(attn_weight.shape, bias.shape)
-    attn_weight = attn_weight + bias
+    if torch.onnx.is_in_onnx_export():
+        # export is failing due to shape mismatch which shouldn't be happening
+        attn_weight = torch.onnx.ops.symbolic(
+            "Add",
+            [attn_weight, bias],
+            attrs={},
+            dtype=attn_weight.dtype,
+            shape=attn_weight.shape,
+            version=14,
+        )
+    else:
+        attn_weight = attn_weight + bias
 
     attn_weights = nn.functional.softmax(attn_weight, dim=-1)
     attn_output = torch.matmul(attn_weights, value)
