@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import torch
+from torch import nn
 
 def get_rotary_pos_emb(position_ids: torch.Tensor, cos_cache: torch.Tensor, sin_cache: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     """
@@ -15,7 +16,8 @@ def get_rotary_pos_emb(position_ids: torch.Tensor, cos_cache: torch.Tensor, sin_
         tuple[torch.Tensor, torch.Tensor]: A tuple containing the cosine and sine embeddings,
                                            each of shape (batch_size, seq_length, head_dim).
     """
-    return cos_cache[position_ids], sin_cache[position_ids]
+    # using embedding so the exported subgraph is just a Gather instead of messy shape ops and GatherND
+    return nn.functional.embedding(position_ids, cos_cache), nn.functional.embedding(position_ids, sin_cache)
 
 # TODO(jambayk): add support for interleaved format if needed
 # requires torch 2.9+

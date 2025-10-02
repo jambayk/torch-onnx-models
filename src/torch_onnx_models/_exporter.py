@@ -10,6 +10,7 @@ import onnx_ir.passes.common as common_passes
 import torch
 from onnx_ir import tensor_adapters
 from torch._subclasses.fake_tensor import FakeTensorMode
+from onnxscript.optimizer import constant_folding
 
 from torch_onnx_models import _configs, onnx_passes
 from torch_onnx_models.components._model import CausalLMModel
@@ -210,11 +211,18 @@ def convert_hf_model(
     passes = ir.passes.PassManager(
         [
             onnx_passes.AssignNamesPass(),
-            common_passes.DeduplicateInitializersPass(),
-            common_passes.CommonSubexpressionEliminationPass(),
+            # needs to be applied early, otherwise deserialization fails
+            constant_folding.FoldConstantsPass(
+                shape_inference=False,
+                input_size_limit=constant_folding.DEFAULT_CONSTANT_FOLD_INPUT_SIZE_LIMIT,
+                output_size_limit=constant_folding.DEFAULT_CONSTANT_FOLD_OUTPUT_SIZE_LIMIT
+            ),
             common_passes.RemoveUnusedNodesPass(),
             common_passes.RemoveUnusedFunctionsPass(),
             common_passes.RemoveUnusedOpsetsPass(),
+            common_passes.LiftConstantsToInitializersPass(lift_all_constants=True, size_limit=0),
+            common_passes.DeduplicateInitializersPass(),
+            common_passes.CommonSubexpressionEliminationPass(),
             # onnx_passes.RemoveBarrierPass()
         ]
     )
