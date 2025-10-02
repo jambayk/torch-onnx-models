@@ -34,13 +34,8 @@ def create_attention_bias(
     return torch.unsqueeze(torch.where(full_mask, 0.0, mask_value), 1)
 
 
-# TODO(jambayk): add doc strings for shape of outputs
-# should we work on 3d inputs instead. ops like Attention, GroupQueryAttention, MultiHeadAttention, RotaryEmbedding seem to be
-# optimized for 3d inputs of shape (batch_size, seq_length, hidden_size)
-# otherwise, there is a lot of transposes and we probably would need to do graph surgery to eliminate them.
-# Hardest would be to change the shape of the kv cache inputs/outputs
-# but the decomposed attention function would have multiple reshapes inside
-# should we make scale optional? maybe not since it requires us to get the head_dim from the input shape
+# requires latest nightly ort to run inference correctly on exported model
+# GQA case is incorrect in stable releases
 def attention(
     *,
     query: torch.Tensor,

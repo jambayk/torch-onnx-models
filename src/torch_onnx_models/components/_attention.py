@@ -48,9 +48,9 @@ class Attention(nn.Module):
             num_heads=self.num_key_value_heads,
         )
 
-        # attention_func = attention
+        attention_func = attention
         # attention_func = attention_decomposed
-        attention_func = attention_contrib_mha
+        # attention_func = attention_contrib_mha
         # print(f"using attention func {attention_func.__name__}")
         attn_output, present_key, present_value = attention_func(
             query=query_states,
