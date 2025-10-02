@@ -203,7 +203,6 @@ def attention_decomposed(
             attrs={},
             dtype=attn_weight.dtype,
             shape=attn_weight.shape,
-            version=14,
         )
     else:
         attn_weight = attn_weight + bias
