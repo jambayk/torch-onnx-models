@@ -10,7 +10,6 @@ from torch_onnx_models.components._rotary_embedding_utils import get_rotary_pos_
 
 
 class Llama3Rope(nn.Module):
-
     def __init__(self, config: _configs.ArchitectureConfig):
         super().__init__()
 
