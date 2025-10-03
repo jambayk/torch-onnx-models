@@ -43,12 +43,30 @@ class FoldTransposePass(ir.passes.InPlacePass):
                         torch.from_numpy(array).permute(*perm), name=name
                     )
 
-            value.const_value = ir.LazyTensor(
-                tensor_func,
+            new_shape = ir.Shape([shape[i] for i in perm])
+
+            assert value.name is not None
+
+            new_value = ir.val(
+                name=f"{value.name}_transposed",
                 dtype=initializer.dtype,
-                shape=ir.Shape(shape),
-                name=name,
+                shape=new_shape,
+                const_value=ir.LazyTensor(
+                    tensor_func,
+                    dtype=initializer.dtype,
+                    shape=new_shape,
+                    name=name,
+                ),
             )
 
+            # Replace the output of the transpose node with the new value
+            ir.convenience.replace_all_uses_with(node.outputs[0], new_value)
+            # Register the new value as an initializer
+            model.graph.initializers.pop(value.name)
+            model.graph.initializers.add(new_value)
+            # Remove the transpose node
+            model.graph.remove(node, safe=True)
+
             modified = True
+
         return ir.passes.PassResult(model, modified=modified)
