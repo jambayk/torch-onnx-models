@@ -4,17 +4,22 @@ import torch
 from torch import nn
 
 from torch_onnx_models import _configs
-from torch_onnx_models.components._rotary_embedding import initialize_rope
-from torch_onnx_models.components._decoder import DecoderLayer
 from torch_onnx_models.components._attention_utils import create_attention_bias
+from torch_onnx_models.components._decoder import DecoderLayer
 from torch_onnx_models.components._rms_norm import RMSNorm
+from torch_onnx_models.components._rotary_embedding import initialize_rope
+
 
 class TextModel(nn.Module):
     def __init__(self, config: _configs.ArchitectureConfig):
         super().__init__()
 
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, config.pad_token_id)
-        self.layers = nn.ModuleList([DecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.embed_tokens = nn.Embedding(
+            config.vocab_size, config.hidden_size, config.pad_token_id
+        )
+        self.layers = nn.ModuleList(
+            [DecoderLayer(config) for _ in range(config.num_hidden_layers)]
+        )
         self.norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = initialize_rope(config)
 
@@ -30,10 +35,16 @@ class TextModel(nn.Module):
         position_embeddings = self.rotary_emb(position_ids)
 
         # get the attention bias
-        attention_bias = create_attention_bias(attention_mask=attention_mask, query_length=input_ids.shape[-1], dtype=hidden_states.dtype)
+        attention_bias = create_attention_bias(
+            attention_mask=attention_mask,
+            query_length=input_ids.shape[-1],
+            dtype=hidden_states.dtype,
+        )
 
         present_key_values = []
-        for layer, past_key_value in zip(self.layers, past_key_values or [None] * len(self.layers)):
+        for layer, past_key_value in zip(
+            self.layers, past_key_values or [None] * len(self.layers)
+        ):
             hidden_states, present_key_value = layer(
                 hidden_states=hidden_states,
                 attention_bias=attention_bias,
@@ -45,6 +56,7 @@ class TextModel(nn.Module):
         hidden_states = self.norm(hidden_states)
 
         return hidden_states, present_key_values
+
 
 class CausalLMModel(nn.Module):
     def __init__(self, config: _configs.ArchitectureConfig):

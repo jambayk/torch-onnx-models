@@ -2,12 +2,19 @@ from __future__ import annotations
 
 import torch
 from torch import nn
-from torch_onnx_models.components._attention_utils import attention, attention_decomposed, attention_contrib_mha
-from torch_onnx_models.components._rotary_embedding_utils import apply_rotary_pos_emb, apply_rotary_pos_emb_decomposed
+from torch_onnx_models.components._attention_utils import (
+    attention,
+    attention_decomposed,
+    attention_contrib_mha,
+)
+from torch_onnx_models.components._rotary_embedding_utils import (
+    apply_rotary_pos_emb,
+    apply_rotary_pos_emb_decomposed,
+)
 from torch_onnx_models import _configs
 
-class Attention(nn.Module):
 
+class Attention(nn.Module):
     # replace config typing with actual config class later
     def __init__(self, config: _configs.ArchitectureConfig):
         super().__init__()
@@ -18,10 +25,26 @@ class Attention(nn.Module):
         # models like gemma have different scaling, generalize later
         self.scaling = self.head_dim**-0.5
 
-        self.q_proj = nn.Linear(self.hidden_size, self.num_attention_heads * self.head_dim, bias=config.attention_bias)
-        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
-        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
-        self.o_proj = nn.Linear(self.num_attention_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
+        self.q_proj = nn.Linear(
+            self.hidden_size,
+            self.num_attention_heads * self.head_dim,
+            bias=config.attention_bias,
+        )
+        self.k_proj = nn.Linear(
+            self.hidden_size,
+            self.num_key_value_heads * self.head_dim,
+            bias=config.attention_bias,
+        )
+        self.v_proj = nn.Linear(
+            self.hidden_size,
+            self.num_key_value_heads * self.head_dim,
+            bias=config.attention_bias,
+        )
+        self.o_proj = nn.Linear(
+            self.num_attention_heads * self.head_dim,
+            self.hidden_size,
+            bias=config.attention_bias,
+        )
 
     def forward(
         self,
