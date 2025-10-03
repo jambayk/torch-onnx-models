@@ -17,6 +17,7 @@ dependencies = [
 	"torch>=2.8.0",
 	"onnx",
     "onnxscript",
+    "tqdm",
 ]
 
 [tool.pytest.ini_options]

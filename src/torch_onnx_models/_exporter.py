@@ -8,6 +8,7 @@ import logging
 import onnx_ir as ir
 import onnx_ir.passes.common as common_passes
 import torch
+import tqdm
 from onnx_ir import tensor_adapters
 from torch._subclasses.fake_tensor import FakeTensorMode
 
@@ -190,7 +191,7 @@ def convert_hf_model(
                 # Fallback to single file
                 all_tensor_files = ["model.safetensors"]
             else:
-                raise e
+                raise
         state_dict = {}
         safetensors_paths = []
         print(f"Downloading {len(all_tensor_files)} safetensors files...")
@@ -199,7 +200,7 @@ def convert_hf_model(
             safetensors_paths.append(
                 hf_hub_download(repo_id=model_id, filename=tensor_file)
             )
-        for path in safetensors_paths:
+        for path in tqdm.tqdm(safetensors_paths, desc="Loading weights"):
             state_dict.update(safetensors.torch.load_file(path))
             # TODO(justinchuby): Validate missing keys
         # can we make this better? at least not hardcode the weight names?
