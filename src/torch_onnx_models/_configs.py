@@ -14,7 +14,7 @@ SUPPORTED_ARCHITECTURES = {
     # "gptoss",
     # "granite",
     "llama",
-    # "mistral",
+    "mistral",
     # "nemotron",
     # "olmo",
     # "phi",
