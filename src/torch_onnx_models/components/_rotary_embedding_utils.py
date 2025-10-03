@@ -3,7 +3,10 @@ from __future__ import annotations
 import torch
 from torch import nn
 
-def get_rotary_pos_emb(position_ids: torch.Tensor, cos_cache: torch.Tensor, sin_cache: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+
+def get_rotary_pos_emb(
+    position_ids: torch.Tensor, cos_cache: torch.Tensor, sin_cache: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Retrieve the cosine and sine positional embeddings based on the provided position IDs.
 
@@ -17,7 +20,10 @@ def get_rotary_pos_emb(position_ids: torch.Tensor, cos_cache: torch.Tensor, sin_
                                            each of shape (batch_size, seq_length, head_dim).
     """
     # using embedding so the exported subgraph is just a Gather instead of messy shape ops and GatherND
-    return nn.functional.embedding(position_ids, cos_cache), nn.functional.embedding(position_ids, sin_cache)
+    return nn.functional.embedding(position_ids, cos_cache), nn.functional.embedding(
+        position_ids, sin_cache
+    )
+
 
 # TODO(jambayk): add support for interleaved format if needed
 # requires torch 2.9+
@@ -98,6 +104,7 @@ def apply_rotary_pos_emb_decomposed(
         return torch.cat([x_applied, x_pass], dim=-1)
 
     return x_applied.reshape(batch_size, seq_length, -1)
+
 
 # this is a fused version of get_rotary_pos_emb + apply_rotary_pos_emb
 def fused_rotary_emb_contrib(

@@ -15,7 +15,9 @@ class RMSNorm(nn.Module):
         self.variance_epsilon = eps
 
     def forward(self, hidden_states):
-        return apply_rms_norm(x=hidden_states, weight=self.weight, eps=self.variance_epsilon)
+        return apply_rms_norm(
+            x=hidden_states, weight=self.weight, eps=self.variance_epsilon
+        )
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"

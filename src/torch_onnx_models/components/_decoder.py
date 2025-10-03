@@ -8,8 +8,8 @@ from torch_onnx_models.components._attention import Attention
 from torch_onnx_models.components._mlp import MLP
 from torch_onnx_models.components._rms_norm import RMSNorm
 
-class DecoderLayer(nn.Module):
 
+class DecoderLayer(nn.Module):
     # take in layer_idx since newer models have hybrid layers
     # sliding window attention, no rope, etc.
     def __init__(self, config: _configs.ArchitectureConfig):
@@ -18,7 +18,9 @@ class DecoderLayer(nn.Module):
         self.self_attn = Attention(config)
         self.mlp = MLP(config)
         self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = RMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps
+        )
 
     def forward(
         self,

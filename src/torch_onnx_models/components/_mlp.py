@@ -1,8 +1,10 @@
-import torch
+from __future__ import annotations
+
 from torch import nn
 
 from torch_onnx_models.components import _activations
 from torch_onnx_models import _configs
+
 
 class MLP(nn.Module):
     def __init__(self, config: _configs.ArchitectureConfig):
@@ -10,9 +12,15 @@ class MLP(nn.Module):
 
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
+        self.gate_proj = nn.Linear(
+            self.hidden_size, self.intermediate_size, bias=config.mlp_bias
+        )
+        self.up_proj = nn.Linear(
+            self.hidden_size, self.intermediate_size, bias=config.mlp_bias
+        )
+        self.down_proj = nn.Linear(
+            self.intermediate_size, self.hidden_size, bias=config.mlp_bias
+        )
         self.act_fn = _activations.get_activation(config.hidden_act)
 
     def forward(self, x):

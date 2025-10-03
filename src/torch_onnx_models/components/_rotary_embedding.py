@@ -10,10 +10,15 @@ from torch_onnx_models.components._rotary_embedding_utils import get_rotary_pos_
 
 
 def _get_default_inv_freq(config: _configs.ArchitectureConfig) -> torch.Tensor:
-    return 1.0 / (config.rope_theta ** (torch.arange(0, config.head_dim, 2, dtype=torch.float) / config.head_dim))
+    return 1.0 / (
+        config.rope_theta
+        ** (torch.arange(0, config.head_dim, 2, dtype=torch.float) / config.head_dim)
+    )
 
 
-def _get_cos_sin_cache(max_position_embeddings: int, inv_freq: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+def _get_cos_sin_cache(
+    max_position_embeddings: int, inv_freq: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
     # should we do max position embeddings or original max position embeddings?
     # some models like llama4 has 10 million
     pos = torch.arange(0, max_position_embeddings, dtype=torch.float)
@@ -37,8 +42,11 @@ class DefaultRope(BaseRope):
 
         with torch._subclasses.fake_tensor.unset_fake_temporarily():
             inv_freq = _get_default_inv_freq(config)
-            cos_cache, sin_cache = _get_cos_sin_cache(config.max_position_embeddings, inv_freq)
+            cos_cache, sin_cache = _get_cos_sin_cache(
+                config.max_position_embeddings, inv_freq
+            )
             self._register_cos_sin_cache(cos_cache, sin_cache)
+
 
 class Llama3Rope(BaseRope):
     def __init__(self, config: _configs.ArchitectureConfig):
@@ -59,14 +67,26 @@ class Llama3Rope(BaseRope):
             wavelen = 2 * math.pi / inv_freq
             # wavelen < high_freq_wavelen: do nothing
             # wavelen > low_freq_wavelen: divide by factor
-            inv_freq_llama = torch.where(wavelen > low_freq_wavelen, inv_freq / factor, inv_freq)
+            inv_freq_llama = torch.where(
+                wavelen > low_freq_wavelen, inv_freq / factor, inv_freq
+            )
             # otherwise: interpolate between the two, using a smooth factor
-            smooth_factor = (old_context_len / wavelen - low_freq_factor) / (high_freq_factor - low_freq_factor)
-            smoothed_inv_freq = (1 - smooth_factor) * inv_freq_llama / factor + smooth_factor * inv_freq_llama
-            is_medium_freq = ~(wavelen < high_freq_wavelen) * ~(wavelen > low_freq_wavelen)
-            inv_freq_llama = torch.where(is_medium_freq, smoothed_inv_freq, inv_freq_llama)
+            smooth_factor = (old_context_len / wavelen - low_freq_factor) / (
+                high_freq_factor - low_freq_factor
+            )
+            smoothed_inv_freq = (
+                1 - smooth_factor
+            ) * inv_freq_llama / factor + smooth_factor * inv_freq_llama
+            is_medium_freq = ~(wavelen < high_freq_wavelen) * ~(
+                wavelen > low_freq_wavelen
+            )
+            inv_freq_llama = torch.where(
+                is_medium_freq, smoothed_inv_freq, inv_freq_llama
+            )
 
-            cos_cache, sin_cache = _get_cos_sin_cache(config.max_position_embeddings, inv_freq_llama)
+            cos_cache, sin_cache = _get_cos_sin_cache(
+                config.max_position_embeddings, inv_freq_llama
+            )
             self._register_cos_sin_cache(cos_cache, sin_cache)
 
 

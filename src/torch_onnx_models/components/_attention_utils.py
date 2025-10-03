@@ -6,7 +6,11 @@ from torch import nn
 
 # TODO(jambayk): generalize to include sliding window
 def create_attention_bias(
-    *, attention_mask: torch.Tensor, query_length: int | torch.SymInt, dtype: torch.dtype, mask_value: float | None = None
+    *,
+    attention_mask: torch.Tensor,
+    query_length: int | torch.SymInt,
+    dtype: torch.dtype,
+    mask_value: float | None = None,
 ) -> torch.Tensor:
     """
     Create attention bias for use in attention mechanisms.
@@ -20,7 +24,9 @@ def create_attention_bias(
     Returns:
         torch.Tensor: The attention bias tensor reshaped and cast to the specified dtype of shape (batch_size, 1, query_length, total_length).
     """
-    assert attention_mask.dim() == 2, "attention_mask should be of shape (batch_size, total_length)"
+    assert attention_mask.dim() == 2, (
+        "attention_mask should be of shape (batch_size, total_length)"
+    )
     all_indices = attention_mask.cumsum(-1)
     kv_indices = torch.unsqueeze(all_indices, 1)
     # should we make this not data dependent slicing?
@@ -28,7 +34,9 @@ def create_attention_bias(
     q_indices = all_indices[:, -query_length:]
     q_indices = torch.unsqueeze(q_indices, -1)
     full_mask = q_indices >= kv_indices
-    full_mask = torch.logical_and(torch.unsqueeze(attention_mask, 1).to(torch.bool), full_mask)
+    full_mask = torch.logical_and(
+        torch.unsqueeze(attention_mask, 1).to(torch.bool), full_mask
+    )
     # make the negative value configurable
     mask_value = torch.finfo(dtype).min if mask_value is None else mask_value
     return torch.unsqueeze(torch.where(full_mask, 0.0, mask_value), 1)
@@ -70,8 +78,18 @@ def attention(
             present_value (torch.Tensor): The present value tensor for caching of shape (batch_size, kv_num_heads, seq_length + past_length, head_dim).
     """
     if torch.onnx.is_in_onnx_export():
-        present_key_shape = (past_key.shape[0], past_key.shape[1], past_key.shape[2] + query.shape[1], past_key.shape[3])
-        present_value_shape = (past_value.shape[0], past_value.shape[1], past_value.shape[2] + query.shape[1], past_value.shape[3])
+        present_key_shape = (
+            past_key.shape[0],
+            past_key.shape[1],
+            past_key.shape[2] + query.shape[1],
+            past_key.shape[3],
+        )
+        present_value_shape = (
+            past_value.shape[0],
+            past_value.shape[1],
+            past_value.shape[2] + query.shape[1],
+            past_value.shape[3],
+        )
         return torch.onnx.ops.symbolic_multi_out(
             "Attention",
             [query, key, value, bias, past_key, past_value],
@@ -84,11 +102,21 @@ def attention(
     # is using torch sdpa which has a strict requirement on the input shapes. Will fix that later
     # Maybe I set the input shapes wrong
     return torch.onnx.ops.attention(
-        query, key, value, bias, past_key, past_value, kv_num_heads=kv_num_heads, q_num_heads=q_num_heads, scale=scale
+        query,
+        key,
+        value,
+        bias,
+        past_key,
+        past_value,
+        kv_num_heads=kv_num_heads,
+        q_num_heads=q_num_heads,
+        scale=scale,
     )[:3]
 
 
-def _reshape_3d_to_4d(x: torch.Tensor, batch_size: int, seq_length: int, num_heads: int) -> torch.Tensor:
+def _reshape_3d_to_4d(
+    x: torch.Tensor, batch_size: int, seq_length: int, num_heads: int
+) -> torch.Tensor:
     """
     Reshape a 3D tensor to a 4D tensor for multi-head attention.
 
@@ -209,7 +237,9 @@ def attention_decomposed(
 
     attn_weights = nn.functional.softmax(attn_weight, dim=-1)
     attn_output = torch.matmul(attn_weights, value)
-    attn_output = attn_output.transpose(1, 2).contiguous().reshape(batch_size, seq_length, -1)
+    attn_output = (
+        attn_output.transpose(1, 2).contiguous().reshape(batch_size, seq_length, -1)
+    )
     return attn_output, present_key, present_value
 
 
