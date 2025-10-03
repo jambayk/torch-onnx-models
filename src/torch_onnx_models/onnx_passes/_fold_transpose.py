@@ -33,8 +33,7 @@ class FoldTransposePass(ir.passes.InPlacePass):
             if isinstance(torch_tensor, torch.Tensor):
 
                 def tensor_func(tensor=torch_tensor):
-                    tensor = tensor.permute(*perm)
-                    return tensor_adapters.TorchTensor(tensor, name=name)
+                    return tensor_adapters.TorchTensor(tensor.permute(*perm), name=name)
             else:
 
                 def tensor_func(tensor=initializer):
