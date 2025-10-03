@@ -11,6 +11,9 @@ class FoldTransposePass(ir.passes.InPlacePass):
     def call(self, model: ir.Model) -> ir.passes.PassResult:
         modified = False
 
+        old_initializers = []
+        new_initializers = []
+
         for name, value in model.graph.initializers.items():
             # Only fold it if there is only one consumer for now
             if len(value.uses()) != 1:
@@ -61,12 +64,17 @@ class FoldTransposePass(ir.passes.InPlacePass):
 
             # Replace the output of the transpose node with the new value
             ir.convenience.replace_all_uses_with(node.outputs[0], new_value)
-            # Register the new value as an initializer
-            model.graph.initializers.pop(value.name)
-            model.graph.initializers.add(new_value)
+            # Avoid modifying the dict while iterating
+            old_initializers.append(value.name)
+            new_initializers.append(new_value)
             # Remove the transpose node
             model.graph.remove(node, safe=True)
 
             modified = True
+
+        for name in old_initializers:
+            del model.graph.initializers[name]
+        for value in new_initializers:
+            model.graph.initializers.add(value)
 
         return ir.passes.PassResult(model, modified=modified)
