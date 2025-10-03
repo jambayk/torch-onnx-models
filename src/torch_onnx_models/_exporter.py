@@ -10,7 +10,6 @@ import onnx_ir.passes.common as common_passes
 import torch
 from onnx_ir import tensor_adapters
 from torch._subclasses.fake_tensor import FakeTensorMode
-from onnxscript.optimizer import constant_folding
 
 from torch_onnx_models import _configs, onnx_passes
 from torch_onnx_models.components._model import CausalLMModel
@@ -46,11 +45,19 @@ def _create_example_inputs(
         "input_ids",
         "attention_mask",
         "position_ids",
-        *[name for i in range(num_hidden_layers) for name in (f"past_key_values.{i}.key", f"past_key_values.{i}.value")],
+        *[
+            name
+            for i in range(num_hidden_layers)
+            for name in (f"past_key_values.{i}.key", f"past_key_values.{i}.value")
+        ],
     ]
     output_names = [
         "logits",
-        *[name for i in range(num_hidden_layers) for name in (f"present.{i}.key", f"present.{i}.value")],
+        *[
+            name
+            for i in range(num_hidden_layers)
+            for name in (f"present.{i}.key", f"present.{i}.value")
+        ],
     ]
 
     example_batch_size = 2
@@ -105,9 +112,7 @@ def apply_weights(model: ir.Model, state_dict: dict[str, torch.Tensor]):
         assert onnx_dtype is not None
         target_dtype = tensor_adapters.to_torch_dtype(onnx_dtype)
         if tensor.dtype != target_dtype:
-            print(
-                f"Converting weight '{name}' from {tensor.dtype} to {target_dtype}."
-            )
+            print(f"Converting weight '{name}' from {tensor.dtype} to {target_dtype}.")
 
             def tensor_func(tensor=tensor, target_dtype=target_dtype, name=name):
                 tensor = tensor.to(target_dtype)
@@ -144,7 +149,9 @@ def convert_hf_model(
     config = transformers.AutoConfig.from_pretrained(model_id)
     architecture_config = _configs.ArchitectureConfig.from_transformers(config)
 
-    example_inputs, dynamic_shapes, input_names, output_names = _create_example_inputs(architecture_config, None)
+    example_inputs, dynamic_shapes, input_names, output_names = _create_example_inputs(
+        architecture_config, None
+    )
 
     with FakeTensorMode():
         model = CausalLMModel(architecture_config)
@@ -198,29 +205,19 @@ def convert_hf_model(
         # can we make this better? at least not hardcode the weight names?
         if config.tie_word_embeddings:
             if "lm_head.weight" in state_dict:
-                state_dict["model.embed_tokens.weight"] = state_dict[
-                    "lm_head.weight"
-                ]
+                state_dict["model.embed_tokens.weight"] = state_dict["lm_head.weight"]
             elif "model.embed_tokens.weight" in state_dict:
-                state_dict["lm_head.weight"] = state_dict[
-                    "model.embed_tokens.weight"
-                ]
+                state_dict["lm_head.weight"] = state_dict["model.embed_tokens.weight"]
 
         apply_weights(onnx_program.model, state_dict)
 
     passes = ir.passes.PassManager(
         [
             onnx_passes.AssignNamesPass(),
-            # needs to be applied early, otherwise deserialization fails
-            constant_folding.FoldConstantsPass(
-                shape_inference=False,
-                input_size_limit=constant_folding.DEFAULT_CONSTANT_FOLD_INPUT_SIZE_LIMIT,
-                output_size_limit=constant_folding.DEFAULT_CONSTANT_FOLD_OUTPUT_SIZE_LIMIT
-            ),
+            onnx_passes.FoldTransposePass(),
             common_passes.RemoveUnusedNodesPass(),
             common_passes.RemoveUnusedFunctionsPass(),
             common_passes.RemoveUnusedOpsetsPass(),
-            common_passes.LiftConstantsToInitializersPass(lift_all_constants=True, size_limit=0),
             common_passes.DeduplicateInitializersPass(),
             common_passes.CommonSubexpressionEliminationPass(),
             # onnx_passes.RemoveBarrierPass()
