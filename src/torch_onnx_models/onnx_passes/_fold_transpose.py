@@ -47,7 +47,8 @@ class FoldTransposePass(ir.passes.InPlacePass):
             assert value.name is not None
 
             new_value = ir.val(
-                name=f"{value.name}_transposed",
+                # Keep the same name
+                name=value.name,
                 dtype=initializer.dtype,
                 shape=new_shape,
                 const_value=ir.LazyTensor(
