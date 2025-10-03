@@ -9,6 +9,7 @@ import onnx_ir as ir
 import onnx_ir.passes.common as common_passes
 import torch
 from onnx_ir import tensor_adapters
+from onnxscript.optimizer import constant_folding
 from torch._subclasses.fake_tensor import FakeTensorMode
 
 from torch_onnx_models import _configs, onnx_passes
@@ -215,6 +216,11 @@ def convert_hf_model(
         [
             onnx_passes.AssignNamesPass(),
             onnx_passes.FoldTransposePass(),
+            constant_folding.FoldConstantsPass(
+                shape_inference=True,
+                input_size_limit=1000,
+                output_size_limit=1000,
+            ),
             common_passes.RemoveUnusedNodesPass(),
             common_passes.RemoveUnusedFunctionsPass(),
             common_passes.RemoveUnusedOpsetsPass(),
