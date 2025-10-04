@@ -40,6 +40,7 @@ class FoldTransposePass(ir.passes.InPlacePass):
 
             elif isinstance(initializer, ir.LazyTensor):
                 assert callable(raw_tensor)
+
                 # We know the lazy tensor must come from a torch tensor
                 def tensor_func(tensor=raw_tensor):
                     torch_tensor = tensor().raw
