@@ -38,10 +38,11 @@ class FoldTransposePass(ir.passes.InPlacePass):
                 def tensor_func(tensor=raw_tensor):
                     return tensor_adapters.TorchTensor(tensor.permute(*perm), name=name)
 
-            elif isinstance(raw_tensor, ir.LazyTensor):
+            elif isinstance(initializer, ir.LazyTensor):
+                assert callable(raw_tensor)
                 # We know the lazy tensor must come from a torch tensor
                 def tensor_func(tensor=raw_tensor):
-                    torch_tensor = tensor._evaluate().raw
+                    torch_tensor = raw_tensor().raw
 
                     return tensor_adapters.TorchTensor(
                         torch_tensor.permute(*perm), name=name
