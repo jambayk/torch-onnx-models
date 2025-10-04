@@ -42,7 +42,7 @@ class FoldTransposePass(ir.passes.InPlacePass):
                 assert callable(raw_tensor)
                 # We know the lazy tensor must come from a torch tensor
                 def tensor_func(tensor=raw_tensor):
-                    torch_tensor = raw_tensor().raw
+                    torch_tensor = tensor().raw
 
                     return tensor_adapters.TorchTensor(
                         torch_tensor.permute(*perm), name=name
