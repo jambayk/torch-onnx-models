@@ -2,15 +2,10 @@ from __future__ import annotations
 
 import torch
 from torch import nn
-from torch_onnx_models.components._attention_utils import (
-    attention,
-    attention_decomposed,
-    attention_contrib_mha,
-)
-from torch_onnx_models.components._rotary_embedding_utils import (
-    apply_rotary_pos_emb,
-    apply_rotary_pos_emb_decomposed,
-)
+
+from torch_onnx_models.components._attention_utils import attention
+from torch_onnx_models.components._rotary_embedding_utils import apply_rotary_pos_emb
+from torch_onnx_models.components._rms_norm import RMSNorm
 from torch_onnx_models import _configs
 
 
@@ -46,6 +41,13 @@ class Attention(nn.Module):
             bias=config.attention_bias,
         )
 
+        if config.use_qk_norm:
+            self.q_norm = RMSNorm(self.head_dim, config)
+            self.k_norm = RMSNorm(self.head_dim, config)
+        else:
+            self.q_norm = None
+            self.k_norm = None
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -57,9 +59,14 @@ class Attention(nn.Module):
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
+        if self.q_norm is not None and self.k_norm is not None:
+            input_shape = hidden_states.shape[:-1]
+            query_states = self.q_norm(query_states.view(*input_shape, -1, self.head_dim))
+            key_states = self.k_norm(key_states.view(*input_shape, -1, self.head_dim))
+            query_states = query_states.view(*input_shape, -1)
+            key_states = key_states.view(*input_shape, -1)
+
         rope_func = apply_rotary_pos_emb
-        # rope_func = apply_rotary_pos_emb_decomposed
-        # print(f"using rope func {rope_func.__name__}")
         query_states = rope_func(
             x=query_states,
             position_embeddings=position_embeddings,
@@ -72,9 +79,6 @@ class Attention(nn.Module):
         )
 
         attention_func = attention
-        # attention_func = attention_decomposed
-        # attention_func = attention_contrib_mha
-        # print(f"using attention func {attention_func.__name__}")
         attn_output, present_key, present_value = attention_func(
             query=query_states,
             key=key_states,
