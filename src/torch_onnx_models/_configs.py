@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import dataclasses
 
-import torch
-
 # https://github.com/huggingface/transformers/blob/3e975acc8bf6d029ec0a54b1c5d0691489dfb051/src/transformers/models/auto/configuration_auto.py#L36
 SUPPORTED_ARCHITECTURES = {
     # "ernie4_5",
