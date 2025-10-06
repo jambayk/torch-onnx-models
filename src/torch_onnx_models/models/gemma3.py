@@ -5,7 +5,7 @@ import copy
 import torch
 from torch import nn
 
-from torch_onnx_models.components import apply_rms_norm, create_attention_bias, initialize_rope, Attention, MLP, RMSNorm
+from torch_onnx_models.components import create_attention_bias, initialize_rope, Attention, MLP, RMSNorm
 from torch_onnx_models._configs import ArchitectureConfig
 
 
@@ -84,16 +84,16 @@ class Gemma3TextModel(nn.Module):
         # embed tokens and positions
         hidden_states = self.embed_tokens(input_ids) * self.embed_scale
         position_embeddings_dict = {
-            "global": self.rotary_emb(position_ids),
-            "local": self.rotary_emb_local(position_ids),
+            "full_attention": self.rotary_emb(position_ids),
+            "sliding_attention": self.rotary_emb_local(position_ids),
         }
 
         # get the attention bias
         attention_bias_dict = {
-            "global": create_attention_bias(
+            "full_attention": create_attention_bias(
                 attention_mask=attention_mask, query_length=input_ids.shape[-1], dtype=hidden_states.dtype
             ),
-            "local": create_attention_bias(
+            "sliding_attention": create_attention_bias(
                 attention_mask=attention_mask,
                 query_length=input_ids.shape[-1],
                 dtype=hidden_states.dtype,
