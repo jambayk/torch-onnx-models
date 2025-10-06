@@ -212,6 +212,7 @@ def convert_hf_model(
             common_passes.RemoveUnusedNodesPass(),
             common_passes.RemoveUnusedFunctionsPass(),
             common_passes.RemoveUnusedOpsetsPass(),
+            common_passes.LiftConstantsToInitializersPass(lift_all_constants=True, size_limit=0),
             common_passes.DeduplicateInitializersPass(),
             common_passes.CommonSubexpressionEliminationPass(),
             # onnx_passes.RemoveBarrierPass()

@@ -86,15 +86,7 @@ class ArchitectureConfig:
             intermediate_size=(getattr(config, "intermediate_size", 4 * config.hidden_size)),
             hidden_act=(getattr(config, "hidden_act", None) or getattr(config, "hidden_activation", None)),
             use_qk_norm=(config.model_type == "gemma3_text"),
-            # consider using the layer types directly from the hf config
-            layer_types=(
-                [
-                    "local" if (i + 1) % config.sliding_window_pattern != 0 else "global"
-                    for i in range(config.num_hidden_layers)
-                ]
-                if hasattr(config, "sliding_window_pattern")
-                else None
-            ),
+            layer_types=(getattr(config, "layer_types", None)),
             sliding_window=(getattr(config, "sliding_window", None)),
             pad_token_id=(getattr(config, "pad_token_id", 0)),  # FIXME
             rms_norm_eps=(getattr(config, "rms_norm_eps", 1e-6)),
