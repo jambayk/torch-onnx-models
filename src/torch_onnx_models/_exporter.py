@@ -13,14 +13,20 @@ from onnx_ir import tensor_adapters
 from torch._subclasses.fake_tensor import FakeTensorMode
 
 from torch_onnx_models import _configs, onnx_passes
-from torch_onnx_models.components._model import CausalLMModel
+from torch_onnx_models.components import CausalLMModel
+from torch_onnx_models.models import Gemma3CausalLMModel
 
 logger = logging.getLogger(__name__)
 
+# improve this once we have more models
+MODEL_MAP = {
+    "gemma3_text": Gemma3CausalLMModel,
+    "llama": CausalLMModel,
+    "mistral": CausalLMModel,
+}
 
-def _create_example_inputs(
-    config: _configs.ArchitectureConfig, export_config: _configs.ExportConfig
-):
+
+def _create_example_inputs(config: _configs.ArchitectureConfig, export_config: _configs.ExportConfig):
     """Create example inputs and dynamic axes for ONNX export."""
     num_hidden_layers = config.num_hidden_layers
     batch = "batch"
@@ -38,8 +44,7 @@ def _create_example_inputs(
             1: sequence_len,
         },
         "past_key_values": [
-            ({0: batch, 2: past_sequence_len}, {0: batch, 2: past_sequence_len})
-            for _ in range(num_hidden_layers)
+            ({0: batch, 2: past_sequence_len}, {0: batch, 2: past_sequence_len}) for _ in range(num_hidden_layers)
         ],
     }
     input_names = [
@@ -54,11 +59,7 @@ def _create_example_inputs(
     ]
     output_names = [
         "logits",
-        *[
-            name
-            for i in range(num_hidden_layers)
-            for name in (f"present.{i}.key", f"present.{i}.value")
-        ],
+        *[name for i in range(num_hidden_layers) for name in (f"present.{i}.key", f"present.{i}.value")],
     ]
 
     example_batch_size = 2
@@ -68,9 +69,7 @@ def _create_example_inputs(
     head_dim = config.head_dim
 
     example_inputs = dict(
-        input_ids=torch.randint(
-            0, 2, (example_batch_size, example_sequence_len), dtype=torch.int64
-        ),
+        input_ids=torch.randint(0, 2, (example_batch_size, example_sequence_len), dtype=torch.int64),
         attention_mask=torch.ones(
             (example_batch_size, example_past_sequence_len + example_sequence_len),
             dtype=torch.int64,
@@ -150,12 +149,10 @@ def convert_hf_model(
     config = transformers.AutoConfig.from_pretrained(model_id)
     architecture_config = _configs.ArchitectureConfig.from_transformers(config)
 
-    example_inputs, dynamic_shapes, input_names, output_names = _create_example_inputs(
-        architecture_config, None
-    )
+    example_inputs, dynamic_shapes, input_names, output_names = _create_example_inputs(architecture_config, None)
 
     with FakeTensorMode():
-        model = CausalLMModel(architecture_config)
+        model = MODEL_MAP[config.model_type](architecture_config)
 
     onnx_program = torch.onnx.export(
         model,
@@ -180,9 +177,7 @@ def convert_hf_model(
 
         # TODO: Support changing local_dir later
         try:
-            safetensors_index_path = hf_hub_download(
-                repo_id=model_id, filename="model.safetensors.index.json"
-            )
+            safetensors_index_path = hf_hub_download(repo_id=model_id, filename="model.safetensors.index.json")
             with open(safetensors_index_path) as f:
                 safetensors_index = json.load(f)
             all_tensor_files = sorted(set(safetensors_index["weight_map"].values()))
@@ -197,9 +192,7 @@ def convert_hf_model(
         print(f"Downloading {len(all_tensor_files)} safetensors files...")
         for tensor_file in all_tensor_files:
             # TODO(justinchuby): Concurrent download
-            safetensors_paths.append(
-                hf_hub_download(repo_id=model_id, filename=tensor_file)
-            )
+            safetensors_paths.append(hf_hub_download(repo_id=model_id, filename=tensor_file))
         for path in tqdm.tqdm(safetensors_paths, desc="Loading weights"):
             state_dict.update(safetensors.torch.load_file(path))
             # TODO(justinchuby): Validate missing keys

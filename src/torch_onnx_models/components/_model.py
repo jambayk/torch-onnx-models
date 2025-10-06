@@ -14,13 +14,9 @@ class TextModel(nn.Module):
     def __init__(self, config: _configs.ArchitectureConfig):
         super().__init__()
 
-        self.embed_tokens = nn.Embedding(
-            config.vocab_size, config.hidden_size, config.pad_token_id
-        )
-        self.layers = nn.ModuleList(
-            [DecoderLayer(config) for _ in range(config.num_hidden_layers)]
-        )
-        self.norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, config.pad_token_id)
+        self.layers = nn.ModuleList([DecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.norm = RMSNorm(config.hidden_size, config)
         self.rotary_emb = initialize_rope(config)
 
     def forward(
@@ -42,9 +38,7 @@ class TextModel(nn.Module):
         )
 
         present_key_values = []
-        for layer, past_key_value in zip(
-            self.layers, past_key_values or [None] * len(self.layers)
-        ):
+        for layer, past_key_value in zip(self.layers, past_key_values or [None] * len(self.layers)):
             hidden_states, present_key_value = layer(
                 hidden_states=hidden_states,
                 attention_bias=attention_bias,

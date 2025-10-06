@@ -10,6 +10,7 @@ def create_attention_bias(
     attention_mask: torch.Tensor,
     query_length: int | torch.SymInt,
     dtype: torch.dtype,
+    sliding_window: int | None = None,
     mask_value: float | None = None,
 ) -> torch.Tensor:
     """
@@ -19,6 +20,7 @@ def create_attention_bias(
         attention_mask (torch.Tensor): The attention mask tensor of shape (batch_size, total_length).
         query_length (torch.Tensor): The length of the query sequence.
         dtype (torch.dtype): The desired data type for the output tensor.
+        sliding_window (int, optional): The size of the sliding window for local attention. If None, full attention is used.
         mask_value (float, optional): The value to use for masked positions. If None, uses the minimum value for the specified dtype.
 
     Returns:
@@ -34,6 +36,8 @@ def create_attention_bias(
     q_indices = all_indices[:, -query_length:]
     q_indices = torch.unsqueeze(q_indices, -1)
     full_mask = q_indices >= kv_indices
+    if sliding_window is not None:
+        full_mask = torch.logical_and(full_mask, q_indices - kv_indices < sliding_window)
     full_mask = torch.logical_and(
         torch.unsqueeze(attention_mask, 1).to(torch.bool), full_mask
     )
