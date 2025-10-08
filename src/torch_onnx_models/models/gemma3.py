@@ -7,6 +7,7 @@ from torch import nn
 
 from torch_onnx_models.components import create_attention_bias, initialize_rope, Attention, MLP, RMSNorm
 from torch_onnx_models._configs import ArchitectureConfig
+from torch_onnx_models.models.base import CausalLMModel
 
 
 class Gemma3DecoderLayer(nn.Module):
@@ -118,24 +119,8 @@ class Gemma3TextModel(nn.Module):
         return hidden_states, present_key_values
 
 
-class Gemma3CausalLMModel(nn.Module):
+class Gemma3CausalLMModel(CausalLMModel):
     def __init__(self, config: ArchitectureConfig):
-        super().__init__()
+        super().__init__(config)
+        # override the model with Gemma3TextModel
         self.model = Gemma3TextModel(config)
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
-    def forward(
-        self,
-        input_ids: torch.Tensor,
-        attention_mask: torch.Tensor,
-        position_ids: torch.Tensor,
-        past_key_values: list[tuple[torch.Tensor, torch.Tensor]] | None = None,
-    ) -> tuple[torch.Tensor, list[tuple[torch.Tensor, torch.Tensor]]]:
-        hidden_states, present_key_values = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-        )
-        logits = self.lm_head(hidden_states)
-        return logits, present_key_values

@@ -16,7 +16,7 @@ SUPPORTED_ARCHITECTURES = {
     # "nemotron",
     # "olmo",
     # "phi",
-    # "phi3",
+    "phi3",
     # "phi3small",
     # "phi3v",
     # "phi4mm",
@@ -57,6 +57,7 @@ class ArchitectureConfig:
     rope_scaling: dict | None = None
     partial_rotary_factor: float = 1.0  # 1.0 means no partial RoPE
     rope_local_base_freq: float | None = None  # only for Gemma-3
+    original_max_position_embeddings: int | None = None
 
     attention_bias: bool = False
     mlp_bias: bool = False
@@ -64,6 +65,7 @@ class ArchitectureConfig:
     head_dim: int = DEFAULT_INT
 
     pad_token_id: int = DEFAULT_INT
+    tie_word_embeddings: bool = False
 
     @classmethod
     def from_transformers(cls, config) -> ArchitectureConfig:
@@ -72,6 +74,7 @@ class ArchitectureConfig:
                 f"Model type '{config.model_type}' not supported. Supported architectures: {SUPPORTED_ARCHITECTURES}"
             )
 
+        rope_scaling = getattr(config, "rope_scaling", None) or {}
         options = dict(
             head_dim=(
                 config.head_dim
@@ -94,17 +97,21 @@ class ArchitectureConfig:
             rms_norm_offset=(1.0 if config.model_type == "gemma3_text" else None),
             attention_bias=(getattr(config, "add_bias_kv", False)),
             mlp_bias=(getattr(config, "use_mlp_bias", False)),
-            # how much older transformers versions are we supporting?
-            rope_type=(
-                config.rope_scaling.get("rope_type")
-                if hasattr(config, "rope_scaling") and isinstance(config.rope_scaling, dict)
-                else "default"
-            ),
+            rope_type=rope_scaling.get("rope_type", rope_scaling.get("type", "default")),
             rope_theta=(getattr(config, "rope_theta", 10_000.0)),
-            rope_scaling=(getattr(config, "rope_scaling", None)),
+            rope_scaling=(rope_scaling or None),
             partial_rotary_factor=(getattr(config, "partial_rotary_factor", 1.0)),
             rope_local_base_freq=(getattr(config, "rope_local_base_freq", None)),
+            # improve this logic later
+            original_max_position_embeddings=(
+                getattr(
+                    config,
+                    "original_max_position_embeddings",
+                    rope_scaling.get("original_max_position_embeddings", None),
+                )
+            ),
             max_position_embeddings=config.max_position_embeddings,
+            tie_word_embeddings=(getattr(config, "tie_word_embeddings", False)),
         )
 
         return cls(**options)
