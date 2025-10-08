@@ -13,8 +13,7 @@ from onnx_ir import tensor_adapters
 from torch._subclasses.fake_tensor import FakeTensorMode
 
 from torch_onnx_models import _configs, onnx_passes
-from torch_onnx_models.components import CausalLMModel
-from torch_onnx_models.models import Gemma3CausalLMModel
+from torch_onnx_models.models import CausalLMModel, Gemma3CausalLMModel, Phi3CausalLMModel
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +22,7 @@ MODEL_MAP = {
     "gemma3_text": Gemma3CausalLMModel,
     "llama": CausalLMModel,
     "mistral": CausalLMModel,
+    "phi3": Phi3CausalLMModel,
 }
 
 
@@ -112,7 +112,7 @@ def apply_weights(model: ir.Model, state_dict: dict[str, torch.Tensor]):
         assert onnx_dtype is not None
         target_dtype = tensor_adapters.to_torch_dtype(onnx_dtype)
         if tensor.dtype != target_dtype:
-            print(f"Converting weight '{name}' from {tensor.dtype} to {target_dtype}.")
+            # print(f"Converting weight '{name}' from {tensor.dtype} to {target_dtype}.")
 
             def tensor_func(tensor=tensor, target_dtype=target_dtype, name=name):
                 tensor = tensor.to(target_dtype)
@@ -196,12 +196,8 @@ def convert_hf_model(
         for path in tqdm.tqdm(safetensors_paths, desc="Loading weights"):
             state_dict.update(safetensors.torch.load_file(path))
             # TODO(justinchuby): Validate missing keys
-        # can we make this better? at least not hardcode the weight names?
-        if config.tie_word_embeddings:
-            if "lm_head.weight" in state_dict:
-                state_dict["model.embed_tokens.weight"] = state_dict["lm_head.weight"]
-            elif "model.embed_tokens.weight" in state_dict:
-                state_dict["lm_head.weight"] = state_dict["model.embed_tokens.weight"]
+        if hasattr(model, "preprocess_weights"):
+            state_dict = model.preprocess_weights(state_dict)
 
         apply_weights(onnx_program.model, state_dict)
 

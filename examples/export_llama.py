@@ -6,6 +6,7 @@ models = {
     # "mistral-7b": "mistralai/Mistral-7B-Instruct-v0.3",
     # "gemma-3-1b": "google/gemma-3-1b-it",
     # "gemma-3-270m": "google/gemma-3-270m-it",
+    # "phi-3_5-mini": "microsoft/Phi-3.5-mini-instruct",
 }
 
 for name, model_id in models.items():

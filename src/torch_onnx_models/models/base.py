@@ -55,6 +55,7 @@ class TextModel(nn.Module):
 class CausalLMModel(nn.Module):
     def __init__(self, config: _configs.ArchitectureConfig):
         super().__init__()
+        self.config = config
         self.model = TextModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
@@ -73,3 +74,13 @@ class CausalLMModel(nn.Module):
         )
         logits = self.lm_head(hidden_states)
         return logits, present_key_values
+
+    def preprocess_weights(self, state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+        """Preprocess the state_dict to match the model's expected keys."""
+        # For compatibility with HuggingFace models, we might need to rename some keys.
+        if self.config.tie_word_embeddings:
+            if "lm_head.weight" in state_dict:
+                state_dict["model.embed_tokens.weight"] = state_dict["lm_head.weight"]
+            elif "model.embed_tokens.weight" in state_dict:
+                state_dict["lm_head.weight"] = state_dict["model.embed_tokens.weight"]
+        return state_dict
