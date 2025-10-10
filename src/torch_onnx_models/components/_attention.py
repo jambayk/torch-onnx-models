@@ -19,6 +19,9 @@ class Attention(nn.Module):
         self.num_key_value_heads = config.num_key_value_heads
         # models like gemma have different scaling, generalize later
         self.scaling = self.head_dim**-0.5
+        self.rotary_embedding_dim = (
+            0 if config.partial_rotary_factor == 1.0 else int(self.head_dim * config.partial_rotary_factor)
+        )
 
         self.q_proj = nn.Linear(
             self.hidden_size,
@@ -66,16 +69,17 @@ class Attention(nn.Module):
             query_states = query_states.view(*input_shape, -1)
             key_states = key_states.view(*input_shape, -1)
 
-        rope_func = apply_rotary_pos_emb
-        query_states = rope_func(
+        query_states = apply_rotary_pos_emb(
             x=query_states,
             position_embeddings=position_embeddings,
             num_heads=self.num_attention_heads,
+            rotary_embedding_dim=self.rotary_embedding_dim,
         )
-        key_states = rope_func(
+        key_states = apply_rotary_pos_emb(
             x=key_states,
             position_embeddings=position_embeddings,
             num_heads=self.num_key_value_heads,
+            rotary_embedding_dim=self.rotary_embedding_dim,
         )
 
         attention_func = attention
