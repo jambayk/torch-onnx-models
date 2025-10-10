@@ -12,7 +12,8 @@ from torch_onnx_models.components._rotary_embedding_utils import get_rotary_pos_
 
 
 def _get_default_inv_freq(config: _configs.ArchitectureConfig) -> torch.Tensor:
-    return 1.0 / (config.rope_theta ** (torch.arange(0, config.head_dim, 2, dtype=torch.float) / config.head_dim))
+    dim = int(config.head_dim * config.partial_rotary_factor)
+    return 1.0 / (config.rope_theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
 
 
 def _get_cos_sin_cache(

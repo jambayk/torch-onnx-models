@@ -7,6 +7,7 @@ models = {
     # "gemma-3-1b": "google/gemma-3-1b-it",
     # "gemma-3-270m": "google/gemma-3-270m-it",
     # "phi-3_5-mini": "microsoft/Phi-3.5-mini-instruct",
+    # "phi-4-mini": "microsoft/Phi-4-mini-instruct",
 }
 
 for name, model_id in models.items():
