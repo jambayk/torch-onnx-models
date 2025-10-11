@@ -31,8 +31,7 @@ def create_attention_bias(
     query_length = input_ids.shape[-1]
     all_indices = attention_mask.cumsum(-1)
     kv_indices = torch.unsqueeze(all_indices, 1)
-    # should we make this not data dependent slicing?
-    # like q_indices = torch.arange(query_length, device=attention_mask.device)
+    # exporter must provide a non-empty past, otherwise torch export thinks query_length == kv_length
     q_indices = all_indices[:, -query_length:]
     q_indices = torch.unsqueeze(q_indices, -1)
     full_mask = q_indices >= kv_indices

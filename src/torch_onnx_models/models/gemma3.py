@@ -124,3 +124,41 @@ class Gemma3CausalLMModel(CausalLMModel):
         super().__init__(config)
         # override the model with Gemma3TextModel
         self.model = Gemma3TextModel(config)
+
+
+def create_image_mask(
+    input_ids: torch.Tensor, attention_mask: torch.Tensor, image_token_id: int = 262144
+) -> torch.Tensor:
+    """
+    Create a mask where the image tokens attend to all tokens within the same image.
+
+    Args:
+        input_ids (torch.Tensor): The input token IDs of shape (batch_size, query_length).
+        attention_mask (torch.Tensor): The attention mask of shape (batch_size, total_length).
+        image_token_id (int, optional): The token ID that represents an image token. Defaults to 262144.
+
+    Returns:
+        torch.Tensor: A mask of shape (batch_size, 1, query_length, total_length) where True indicates that the query token can attend to the key token.
+    """
+    query_length = input_ids.shape[-1]
+    batch_size, kv_length = attention_mask.shape
+
+    is_img = input_ids == image_token_id
+    leading_zero = torch.zeros((batch_size, 1), dtype=is_img.dtype)
+    prev = torch.cat([leading_zero, is_img[:, :-1]], dim=1)
+    starts = is_img & ~prev
+    gid = torch.cumsum(starts, dim=1)
+    gid = torch.where(is_img, gid, torch.full_like(gid, 0))
+
+    q_gid = gid
+    # just like attention mask bias, the exporter needs to provide some past kvs, otherwise this becomes a no-op in the exported model
+    # even if we don't use cat and use some other data dependent slicing, torch export might think query_length == kv_length
+    k_gid = torch.cat(
+        [
+            torch.full((batch_size, kv_length - query_length), -1, dtype=gid.dtype),
+            gid,
+        ],
+        dim=1,
+    )
+    mask = (q_gid.unsqueeze(2) == k_gid.unsqueeze(1)) & (q_gid.unsqueeze(2) > 0)
+    return mask.unsqueeze(1)
