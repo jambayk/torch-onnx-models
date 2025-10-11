@@ -32,8 +32,8 @@ class TextModel(nn.Module):
 
         # get the attention bias
         attention_bias = create_attention_bias(
+            input_ids=input_ids,
             attention_mask=attention_mask,
-            query_length=input_ids.shape[-1],
             dtype=hidden_states.dtype,
         )
 

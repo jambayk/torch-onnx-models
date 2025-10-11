@@ -92,11 +92,11 @@ class Gemma3TextModel(nn.Module):
         # get the attention bias
         attention_bias_dict = {
             "full_attention": create_attention_bias(
-                attention_mask=attention_mask, query_length=input_ids.shape[-1], dtype=hidden_states.dtype
+                input_ids=input_ids, attention_mask=attention_mask, dtype=hidden_states.dtype
             ),
             "sliding_attention": create_attention_bias(
+                input_ids=input_ids,
                 attention_mask=attention_mask,
-                query_length=input_ids.shape[-1],
                 dtype=hidden_states.dtype,
                 sliding_window=self.sliding_window,
             ),
