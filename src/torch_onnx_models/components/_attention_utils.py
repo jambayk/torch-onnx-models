@@ -14,7 +14,7 @@ def create_attention_bias(
     mask_value: float | None = None,
 ) -> torch.Tensor:
     """
-    Create attention bias for use in attention mechanisms.
+    Create causal attention bias for use in attention mechanisms.
 
     Args:
         input_ids (torch.Tensor): The input tensor of shape (batch_size, query_length).
@@ -51,7 +51,7 @@ def attention(
     key: torch.Tensor,
     value: torch.Tensor,
     # rename back to attention_mask?
-    bias: torch.Tensor,
+    bias: torch.Tensor | None = None,
     past_key: torch.Tensor | None = None,
     past_value: torch.Tensor | None = None,
     q_num_heads: int,
@@ -64,10 +64,10 @@ def attention(
     Args:
         query (torch.Tensor): The query tensor of shape (batch_size, seq_length, q_num_heads * head_dim).
         key (torch.Tensor): The key tensor of shape (batch_size, seq_length, kv_num_heads * head_dim).
-        value (torch.Tensor): The value tensor of shape (batch_size, seq_length, kv_num_heads * head_dim).
-        bias (torch.Tensor): The attention bias tensor of shape (batch_size or 1, q_num_heads or 1, seq_length, seq_length + past_length).
+        value (torch.Tensor): The value tensor of shape (batch_size, seq_length, kv_num_heads * v_head_dim).
+        bias (torch.Tensor | None): The attention bias tensor of shape (batch_size or 1, q_num_heads or 1, seq_length, seq_length + past_length).
         past_key (torch.Tensor | None): The past key tensor for caching of shape (batch_size, kv_num_heads, past_length, head_dim).
-        past_value (torch.Tensor | None): The past value tensor for caching of shape (batch_size, kv_num_heads, past_length, head_dim).
+        past_value (torch.Tensor | None): The past value tensor for caching of shape (batch_size, kv_num_heads, past_length, v_head_dim).
         q_num_heads (int): The number of query attention heads.
         kv_num_heads (int): The number of key-value heads.
         scale (float): The scaling factor for the attention scores.
@@ -79,18 +79,13 @@ def attention(
             present_value (torch.Tensor): The present value tensor for caching of shape (batch_size, kv_num_heads, seq_length + past_length, head_dim).
     """
     if torch.onnx.is_in_onnx_export():
-        present_key_shape = (
-            past_key.shape[0],
-            past_key.shape[1],
-            past_key.shape[2] + query.shape[1],
-            past_key.shape[3],
-        )
-        present_value_shape = (
-            past_value.shape[0],
-            past_value.shape[1],
-            past_value.shape[2] + query.shape[1],
-            past_value.shape[3],
-        )
+        batch_size, seq_length, _ = query.shape
+        past_length = 0 if past_key is None else past_key.shape[2]
+        head_dim = key.shape[-1] // kv_num_heads
+        v_head_dim = value.shape[-1] // kv_num_heads
+
+        present_key_shape = (batch_size, kv_num_heads, past_length + seq_length, head_dim)
+        present_value_shape = (batch_size, kv_num_heads, past_length + seq_length, v_head_dim)
         return torch.onnx.ops.symbolic_multi_out(
             "Attention",
             [query, key, value, bias, past_key, past_value],
@@ -194,10 +189,10 @@ def attention_decomposed(
     Args:
         query (torch.Tensor): The query tensor of shape (batch_size, seq_length, q_num_heads * head_dim).
         key (torch.Tensor): The key tensor of shape (batch_size, seq_length, kv_num_heads * head_dim).
-        value (torch.Tensor): The value tensor of shape (batch_size, seq_length, kv_num_heads * head_dim).
-        bias (torch.Tensor): The attention bias tensor of shape (batch_size or 1, q_num_heads or 1, seq_length, seq_length + past_length).
+        value (torch.Tensor): The value tensor of shape (batch_size, seq_length, kv_num_heads * v_head_dim).
+        bias (torch.Tensor | None): The attention bias tensor of shape (batch_size or 1, q_num_heads or 1, seq_length, seq_length + past_length).
         past_key (torch.Tensor | None): The past key tensor for caching of shape (batch_size, kv_num_heads, past_length, head_dim).
-        past_value (torch.Tensor | None): The past value tensor for caching of shape (batch_size, kv_num_heads, past_length, head_dim).
+        past_value (torch.Tensor | None): The past value tensor for caching of shape (batch_size, kv_num_heads, past_length, v_head_dim).
         q_num_heads (int): The number of query attention heads.
         kv_num_heads (int): The number of key-value heads.
         scale (float): The scaling factor for the attention scores.
@@ -222,17 +217,18 @@ def attention_decomposed(
     )
 
     attn_weight = torch.matmul(query, key.transpose(2, 3)) * scale
-    if torch.onnx.is_in_onnx_export():
-        # export is failing due to shape mismatch which shouldn't be happening
-        attn_weight = torch.onnx.ops.symbolic(
-            "Add",
-            [attn_weight, bias],
-            attrs={},
-            dtype=attn_weight.dtype,
-            shape=attn_weight.shape,
-        )
-    else:
-        attn_weight = attn_weight + bias
+    if bias is not None:
+        if torch.onnx.is_in_onnx_export():
+            # export is failing due to shape mismatch which shouldn't be happening
+            attn_weight = torch.onnx.ops.symbolic(
+                "Add",
+                [attn_weight, bias],
+                attrs={},
+                dtype=attn_weight.dtype,
+                shape=attn_weight.shape,
+            )
+        else:
+            attn_weight = attn_weight + bias
 
     attn_weights = nn.functional.softmax(attn_weight, dim=-1)
     attn_output = torch.matmul(attn_weights, value)
@@ -258,10 +254,10 @@ def attention_contrib_mha(
     Args:
         query (torch.Tensor): The query tensor of shape (batch_size, seq_length, q_num_heads * head_dim).
         key (torch.Tensor): The key tensor of shape (batch_size, seq_length, kv_num_heads * head_dim).
-        value (torch.Tensor): The value tensor of shape (batch_size, seq_length, kv_num_heads * head_dim).
-        bias (torch.Tensor): The attention bias tensor of shape (batch_size or 1, q_num_heads or 1, seq_length, seq_length + past_length).
+        value (torch.Tensor): The value tensor of shape (batch_size, seq_length, kv_num_heads * v_head_dim).
+        bias (torch.Tensor | None): The attention bias tensor of shape (batch_size or 1, q_num_heads or 1, seq_length, seq_length + past_length).
         past_key (torch.Tensor | None): The past key tensor for caching of shape (batch_size, kv_num_heads, past_length, head_dim).
-        past_value (torch.Tensor | None): The past value tensor for caching of shape (batch_size, kv_num_heads, past_length, head_dim).
+        past_value (torch.Tensor | None): The past value tensor for caching of shape (batch_size, kv_num_heads, past_length, v_head_dim).
         q_num_heads (int): The number of query attention heads.
         kv_num_heads (int): The number of key-value heads.
         scale (float): The scaling factor for the attention scores.
