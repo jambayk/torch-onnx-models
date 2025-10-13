@@ -44,6 +44,17 @@ class DefaultRope(BaseRope):
             self._register_cos_sin_cache(cos_cache, sin_cache)
 
 
+class LinearRope(BaseRope):
+    def __init__(self, config: _configs.ArchitectureConfig):
+        super().__init__()
+
+        with torch._subclasses.fake_tensor.unset_fake_temporarily():
+            inv_freq = _get_default_inv_freq(config)
+            inv_freq /= config.rope_scaling["factor"]
+            cos_cache, sin_cache = _get_cos_sin_cache(config.max_position_embeddings, inv_freq)
+            self._register_cos_sin_cache(cos_cache, sin_cache)
+
+
 class Llama3Rope(BaseRope):
     def __init__(self, config: _configs.ArchitectureConfig):
         super().__init__()
@@ -120,6 +131,8 @@ class LongRope(BaseRope):
 def initialize_rope(config: _configs.ArchitectureConfig) -> nn.Module:
     if config.rope_type == "default":
         return DefaultRope(config)
+    if config.rope_type == "linear":
+        return LinearRope(config)
     if config.rope_type == "llama3":
         return Llama3Rope(config)
     if config.rope_type == "longrope":

@@ -19,6 +19,15 @@ from torch_onnx_models._configs import ArchitectureConfig
 from torch_onnx_models.models.base import CausalLMModel
 
 
+class Gemma3TextScaledWordEmbedding(nn.Embedding):
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: float = 1.0):
+        super().__init__(num_embeddings, embedding_dim, padding_idx)
+        self.embed_scale = embed_scale
+
+    def forward(self, input_ids: torch.Tensor):
+        return super().forward(input_ids) * self.embed_scale
+
+
 class Gemma3RMSNorm(RMSNorm):
     def forward(self, hidden_states):
         return apply_rms_norm(x=hidden_states.float(), weight=self.weight.float() + 1, eps=self.variance_epsilon).to(
@@ -117,18 +126,51 @@ class Gemma3DecoderLayer(nn.Module):
         return hidden_states, present_key_value
 
 
+class Gemma3AttentionBias(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.sliding_window = config.sliding_window
+
+    def forward(
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        dtype: torch.dtype,
+        or_mask_func: callable | None = None,
+    ) -> dict[str, torch.Tensor]:
+        attention_bias_dict = {
+            "full_attention": create_attention_bias(input_ids=input_ids, attention_mask=attention_mask, dtype=dtype),
+            "sliding_attention": create_attention_bias(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                dtype=dtype,
+                sliding_window=self.sliding_window,
+            ),
+        }
+        if or_mask_func is not None:
+            or_mask = or_mask_func(input_ids, attention_mask)
+            for key, value in attention_bias_dict.items():
+                attention_bias_dict[key] = torch.where(or_mask, 0.0, value)
+        return attention_bias_dict
+
+
 class Gemma3TextModel(nn.Module):
     def __init__(self, config: ArchitectureConfig):
         super().__init__()
 
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
         # original model is in bf16 and the modeling code has this in bf16
         # huggingface chose to keep the same modeling code and use the weight dtype
         # but this would lead to different results if the weight is float32
         # we chose to use a constant in bf16 to match the original model
         # https://github.com/huggingface/transformers/pull/29402
         # https://github.com/huggingface/transformers/issues/38702
-        self.embed_scale = torch.tensor(config.hidden_size**0.5, dtype=torch.bfloat16).item()
+        self.embed_tokens = Gemma3TextScaledWordEmbedding(
+            config.vocab_size,
+            config.hidden_size,
+            config.pad_token_id,
+            embed_scale=torch.tensor(config.hidden_size**0.5, dtype=torch.bfloat16).item(),
+        )
+        self.attention_bias = Gemma3AttentionBias(config)
 
         self.layers = nn.ModuleList([Gemma3DecoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.layer_types = config.layer_types
@@ -149,26 +191,20 @@ class Gemma3TextModel(nn.Module):
         attention_mask: torch.Tensor,
         position_ids: torch.Tensor,
         past_key_values: list[tuple[torch.Tensor, torch.Tensor]] | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        or_mask_func: callable | None = None,
     ) -> tuple[torch.Tensor, list[tuple[torch.Tensor, torch.Tensor]]]:
         # embed tokens and positions
-        hidden_states = self.embed_tokens(input_ids) * self.embed_scale
+        hidden_states = inputs_embeds if inputs_embeds is not None else self.embed_tokens(input_ids)
         position_embeddings_dict = {
             "full_attention": self.rotary_emb(position_ids),
             "sliding_attention": self.rotary_emb_local(position_ids),
         }
 
         # get the attention bias
-        attention_bias_dict = {
-            "full_attention": create_attention_bias(
-                input_ids=input_ids, attention_mask=attention_mask, dtype=hidden_states.dtype
-            ),
-            "sliding_attention": create_attention_bias(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                dtype=hidden_states.dtype,
-                sliding_window=self.sliding_window,
-            ),
-        }
+        attention_bias_dict = self.attention_bias(
+            input_ids, attention_mask, hidden_states.dtype, or_mask_func=or_mask_func
+        )
 
         present_key_values = []
         for layer, layer_type, past_key_value in zip(
@@ -192,41 +228,3 @@ class Gemma3CausalLMModel(CausalLMModel):
         super().__init__(config)
         # override the model with Gemma3TextModel
         self.model = Gemma3TextModel(config)
-
-
-def create_image_mask(
-    input_ids: torch.Tensor, attention_mask: torch.Tensor, image_token_id: int = 262144
-) -> torch.Tensor:
-    """
-    Create a mask where the image tokens attend to all tokens within the same image.
-
-    Args:
-        input_ids (torch.Tensor): The input token IDs of shape (batch_size, query_length).
-        attention_mask (torch.Tensor): The attention mask of shape (batch_size, total_length).
-        image_token_id (int, optional): The token ID that represents an image token. Defaults to 262144.
-
-    Returns:
-        torch.Tensor: A mask of shape (batch_size, 1, query_length, total_length) where True indicates that the query token can attend to the key token.
-    """
-    query_length = input_ids.shape[-1]
-    batch_size, kv_length = attention_mask.shape
-
-    is_img = input_ids == image_token_id
-    leading_zero = torch.zeros((batch_size, 1), dtype=is_img.dtype)
-    prev = torch.cat([leading_zero, is_img[:, :-1]], dim=1)
-    starts = is_img & ~prev
-    gid = torch.cumsum(starts, dim=1)
-    gid = torch.where(is_img, gid, torch.full_like(gid, 0))
-
-    q_gid = gid
-    # just like attention mask bias, the exporter needs to provide some past kvs, otherwise this becomes a no-op in the exported model
-    # even if we don't use cat and use some other data dependent slicing, torch export might think query_length == kv_length
-    k_gid = torch.cat(
-        [
-            torch.full((batch_size, kv_length - query_length), -1, dtype=gid.dtype),
-            gid,
-        ],
-        dim=1,
-    )
-    mask = (q_gid.unsqueeze(2) == k_gid.unsqueeze(1)) & (q_gid.unsqueeze(2) > 0)
-    return mask.unsqueeze(1)
