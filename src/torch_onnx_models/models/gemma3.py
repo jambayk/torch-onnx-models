@@ -62,7 +62,7 @@ def create_image_mask(input_ids: torch.Tensor, attention_mask: torch.Tensor, ima
 
     is_img = input_ids == image_token_id
     leading_zero = torch.zeros((batch_size, 1), dtype=is_img.dtype, device=is_img.device)
-    # TODO(jambayk): maybe try a differen way to slice since it's creates unnecessary ops in the graph
+    # TODO(jambayk): maybe try a different way to slice since it's creates unnecessary ops in the graph
     prev = torch.cat([leading_zero, is_img[:, :-1]], dim=1)
     starts = is_img & ~prev
     gid = torch.cumsum(starts, dim=1)
@@ -84,7 +84,7 @@ def create_image_mask(input_ids: torch.Tensor, attention_mask: torch.Tensor, ima
 
 
 # need a better name for this module
-class Gemma3MultiModelMixer(nn.Module):
+class Gemma3MultiModalMixer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.image_token_id = config.image_token_id
@@ -100,7 +100,7 @@ class Gemma3MultiModalModel(nn.Module):
         super().__init__()
         self.vision_tower = SiglipVisionModel(config.vision_config)
         self.multi_modal_projector = Gemma3MultiModalProjector(config)
-        self.mixer = Gemma3MultiModelMixer(config)
+        self.mixer = Gemma3MultiModalMixer(config)
         self.language_model = Gemma3TextModel(ArchitectureConfig.from_transformers(config.text_config))
         self.image_token_id = config.image_token_id
 
