@@ -10,7 +10,6 @@ from torch_onnx_models import _configs
 
 
 class Attention(nn.Module):
-    # replace config typing with actual config class later
     def __init__(self, config: _configs.ArchitectureConfig):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -44,13 +43,6 @@ class Attention(nn.Module):
             bias=config.attention_bias,
         )
 
-        if config.use_qk_norm:
-            self.q_norm = RMSNorm(self.head_dim, config)
-            self.k_norm = RMSNorm(self.head_dim, config)
-        else:
-            self.q_norm = None
-            self.k_norm = None
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -61,13 +53,6 @@ class Attention(nn.Module):
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
-
-        if self.q_norm is not None and self.k_norm is not None:
-            input_shape = hidden_states.shape[:-1]
-            query_states = self.q_norm(query_states.view(*input_shape, -1, self.head_dim))
-            key_states = self.k_norm(key_states.view(*input_shape, -1, self.head_dim))
-            query_states = query_states.view(*input_shape, -1)
-            key_states = key_states.view(*input_shape, -1)
 
         query_states = apply_rotary_pos_emb(
             x=query_states,
@@ -82,8 +67,7 @@ class Attention(nn.Module):
             rotary_embedding_dim=self.rotary_embedding_dim,
         )
 
-        attention_func = attention
-        attn_output, present_key, present_value = attention_func(
+        attn_output, present_key, present_value = attention(
             query=query_states,
             key=key_states,
             value=value_states,

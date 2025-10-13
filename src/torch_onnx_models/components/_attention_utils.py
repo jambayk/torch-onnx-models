@@ -7,18 +7,18 @@ from torch import nn
 # TODO(jambayk): generalize to include sliding window
 def create_attention_bias(
     *,
+    input_ids: torch.Tensor,
     attention_mask: torch.Tensor,
-    query_length: int | torch.SymInt,
     dtype: torch.dtype,
     sliding_window: int | None = None,
     mask_value: float | None = None,
 ) -> torch.Tensor:
     """
-    Create attention bias for use in attention mechanisms.
+    Create causal attention bias for use in attention mechanisms.
 
     Args:
+        input_ids (torch.Tensor): The input tensor of shape (batch_size, query_length).
         attention_mask (torch.Tensor): The attention mask tensor of shape (batch_size, total_length).
-        query_length (torch.Tensor): The length of the query sequence.
         dtype (torch.dtype): The desired data type for the output tensor.
         sliding_window (int, optional): The size of the sliding window for local attention. If None, full attention is used.
         mask_value (float, optional): The value to use for masked positions. If None, uses the minimum value for the specified dtype.
@@ -26,21 +26,18 @@ def create_attention_bias(
     Returns:
         torch.Tensor: The attention bias tensor reshaped and cast to the specified dtype of shape (batch_size, 1, query_length, total_length).
     """
-    assert attention_mask.dim() == 2, (
-        "attention_mask should be of shape (batch_size, total_length)"
-    )
+    assert input_ids.dim() == 2, "input_ids should be of shape (batch_size, query_length)"
+    assert attention_mask.dim() == 2, "attention_mask should be of shape (batch_size, total_length)"
+    query_length = input_ids.shape[-1]
     all_indices = attention_mask.cumsum(-1)
     kv_indices = torch.unsqueeze(all_indices, 1)
-    # should we make this not data dependent slicing?
-    # like q_indices = torch.arange(query_length, device=attention_mask.device)
+    # exporter must provide a non-empty past, otherwise torch export thinks query_length == kv_length
     q_indices = all_indices[:, -query_length:]
     q_indices = torch.unsqueeze(q_indices, -1)
     full_mask = q_indices >= kv_indices
     if sliding_window is not None:
         full_mask = torch.logical_and(full_mask, q_indices - kv_indices < sliding_window)
-    full_mask = torch.logical_and(
-        torch.unsqueeze(attention_mask, 1).to(torch.bool), full_mask
-    )
+    full_mask = torch.logical_and(torch.unsqueeze(attention_mask, 1).to(torch.bool), full_mask)
     # make the negative value configurable
     mask_value = torch.finfo(dtype).min if mask_value is None else mask_value
     return torch.unsqueeze(torch.where(full_mask, 0.0, mask_value), 1)
@@ -54,7 +51,7 @@ def attention(
     key: torch.Tensor,
     value: torch.Tensor,
     # rename back to attention_mask?
-    bias: torch.Tensor,
+    bias: torch.Tensor | None = None,
     past_key: torch.Tensor | None = None,
     past_value: torch.Tensor | None = None,
     q_num_heads: int,
@@ -67,10 +64,10 @@ def attention(
     Args:
         query (torch.Tensor): The query tensor of shape (batch_size, seq_length, q_num_heads * head_dim).
         key (torch.Tensor): The key tensor of shape (batch_size, seq_length, kv_num_heads * head_dim).
-        value (torch.Tensor): The value tensor of shape (batch_size, seq_length, kv_num_heads * head_dim).
-        bias (torch.Tensor): The attention bias tensor of shape (batch_size or 1, q_num_heads or 1, seq_length, seq_length + past_length).
+        value (torch.Tensor): The value tensor of shape (batch_size, seq_length, kv_num_heads * v_head_dim).
+        bias (torch.Tensor | None): The attention bias tensor of shape (batch_size or 1, q_num_heads or 1, seq_length, seq_length + past_length).
         past_key (torch.Tensor | None): The past key tensor for caching of shape (batch_size, kv_num_heads, past_length, head_dim).
-        past_value (torch.Tensor | None): The past value tensor for caching of shape (batch_size, kv_num_heads, past_length, head_dim).
+        past_value (torch.Tensor | None): The past value tensor for caching of shape (batch_size, kv_num_heads, past_length, v_head_dim).
         q_num_heads (int): The number of query attention heads.
         kv_num_heads (int): The number of key-value heads.
         scale (float): The scaling factor for the attention scores.
@@ -82,18 +79,13 @@ def attention(
             present_value (torch.Tensor): The present value tensor for caching of shape (batch_size, kv_num_heads, seq_length + past_length, head_dim).
     """
     if torch.onnx.is_in_onnx_export():
-        present_key_shape = (
-            past_key.shape[0],
-            past_key.shape[1],
-            past_key.shape[2] + query.shape[1],
-            past_key.shape[3],
-        )
-        present_value_shape = (
-            past_value.shape[0],
-            past_value.shape[1],
-            past_value.shape[2] + query.shape[1],
-            past_value.shape[3],
-        )
+        batch_size, seq_length, _ = query.shape
+        past_length = 0 if past_key is None else past_key.shape[2]
+        head_dim = key.shape[-1] // kv_num_heads
+        v_head_dim = value.shape[-1] // kv_num_heads
+
+        present_key_shape = (batch_size, kv_num_heads, past_length + seq_length, head_dim)
+        present_value_shape = (batch_size, kv_num_heads, past_length + seq_length, v_head_dim)
         return torch.onnx.ops.symbolic_multi_out(
             "Attention",
             [query, key, value, bias, past_key, past_value],
@@ -118,9 +110,7 @@ def attention(
     )[:3]
 
 
-def _reshape_3d_to_4d(
-    x: torch.Tensor, batch_size: int, seq_length: int, num_heads: int
-) -> torch.Tensor:
+def _reshape_3d_to_4d(x: torch.Tensor, batch_size: int, seq_length: int, num_heads: int) -> torch.Tensor:
     """
     Reshape a 3D tensor to a 4D tensor for multi-head attention.
 
@@ -199,10 +189,10 @@ def attention_decomposed(
     Args:
         query (torch.Tensor): The query tensor of shape (batch_size, seq_length, q_num_heads * head_dim).
         key (torch.Tensor): The key tensor of shape (batch_size, seq_length, kv_num_heads * head_dim).
-        value (torch.Tensor): The value tensor of shape (batch_size, seq_length, kv_num_heads * head_dim).
-        bias (torch.Tensor): The attention bias tensor of shape (batch_size or 1, q_num_heads or 1, seq_length, seq_length + past_length).
+        value (torch.Tensor): The value tensor of shape (batch_size, seq_length, kv_num_heads * v_head_dim).
+        bias (torch.Tensor | None): The attention bias tensor of shape (batch_size or 1, q_num_heads or 1, seq_length, seq_length + past_length).
         past_key (torch.Tensor | None): The past key tensor for caching of shape (batch_size, kv_num_heads, past_length, head_dim).
-        past_value (torch.Tensor | None): The past value tensor for caching of shape (batch_size, kv_num_heads, past_length, head_dim).
+        past_value (torch.Tensor | None): The past value tensor for caching of shape (batch_size, kv_num_heads, past_length, v_head_dim).
         q_num_heads (int): The number of query attention heads.
         kv_num_heads (int): The number of key-value heads.
         scale (float): The scaling factor for the attention scores.
@@ -227,23 +217,22 @@ def attention_decomposed(
     )
 
     attn_weight = torch.matmul(query, key.transpose(2, 3)) * scale
-    if torch.onnx.is_in_onnx_export():
-        # export is failing due to shape mismatch which shouldn't be happening
-        attn_weight = torch.onnx.ops.symbolic(
-            "Add",
-            [attn_weight, bias],
-            attrs={},
-            dtype=attn_weight.dtype,
-            shape=attn_weight.shape,
-        )
-    else:
-        attn_weight = attn_weight + bias
+    if bias is not None:
+        if torch.onnx.is_in_onnx_export():
+            # export is failing due to shape mismatch which shouldn't be happening
+            attn_weight = torch.onnx.ops.symbolic(
+                "Add",
+                [attn_weight, bias],
+                attrs={},
+                dtype=attn_weight.dtype,
+                shape=attn_weight.shape,
+            )
+        else:
+            attn_weight = attn_weight + bias
 
     attn_weights = nn.functional.softmax(attn_weight, dim=-1)
     attn_output = torch.matmul(attn_weights, value)
-    attn_output = (
-        attn_output.transpose(1, 2).contiguous().reshape(batch_size, seq_length, -1)
-    )
+    attn_output = attn_output.transpose(1, 2).contiguous().reshape(batch_size, seq_length, -1)
     return attn_output, present_key, present_value
 
 
@@ -265,10 +254,10 @@ def attention_contrib_mha(
     Args:
         query (torch.Tensor): The query tensor of shape (batch_size, seq_length, q_num_heads * head_dim).
         key (torch.Tensor): The key tensor of shape (batch_size, seq_length, kv_num_heads * head_dim).
-        value (torch.Tensor): The value tensor of shape (batch_size, seq_length, kv_num_heads * head_dim).
-        bias (torch.Tensor): The attention bias tensor of shape (batch_size or 1, q_num_heads or 1, seq_length, seq_length + past_length).
+        value (torch.Tensor): The value tensor of shape (batch_size, seq_length, kv_num_heads * v_head_dim).
+        bias (torch.Tensor | None): The attention bias tensor of shape (batch_size or 1, q_num_heads or 1, seq_length, seq_length + past_length).
         past_key (torch.Tensor | None): The past key tensor for caching of shape (batch_size, kv_num_heads, past_length, head_dim).
-        past_value (torch.Tensor | None): The past value tensor for caching of shape (batch_size, kv_num_heads, past_length, head_dim).
+        past_value (torch.Tensor | None): The past value tensor for caching of shape (batch_size, kv_num_heads, past_length, v_head_dim).
         q_num_heads (int): The number of query attention heads.
         kv_num_heads (int): The number of key-value heads.
         scale (float): The scaling factor for the attention scores.

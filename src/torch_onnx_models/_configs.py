@@ -43,13 +43,10 @@ class ArchitectureConfig:
     hidden_act: str | None = None
 
     # attention config
-    use_qk_norm: bool = False  # only for Gemma-3
-    layer_types: list[str] | None = None  # only for Gemma-3
-    sliding_window: int | None = None  # only for Gemma-3
+    layer_types: list[str] | None = None
+    sliding_window: int | None = None
 
     rms_norm_eps: float = 1e-6
-    rms_norm_all_fp32: bool = False  # only for Gemma-3
-    rms_norm_offset: float | None = None  # only for Gemma-3
 
     # Rotary embedding config
     rope_type: str = "default"
@@ -88,13 +85,10 @@ class ArchitectureConfig:
             hidden_size=config.hidden_size,
             intermediate_size=(getattr(config, "intermediate_size", 4 * config.hidden_size)),
             hidden_act=(getattr(config, "hidden_act", None) or getattr(config, "hidden_activation", None)),
-            use_qk_norm=(config.model_type == "gemma3_text"),
             layer_types=(getattr(config, "layer_types", None)),
             sliding_window=(getattr(config, "sliding_window", None)),
             pad_token_id=(getattr(config, "pad_token_id", 0)),  # FIXME
             rms_norm_eps=(getattr(config, "rms_norm_eps", 1e-6)),
-            rms_norm_all_fp32=(config.model_type == "gemma3_text"),
-            rms_norm_offset=(1.0 if config.model_type == "gemma3_text" else None),
             attention_bias=(getattr(config, "add_bias_kv", False)),
             mlp_bias=(getattr(config, "use_mlp_bias", False)),
             rope_type=rope_scaling.get("rope_type", rope_scaling.get("type", "default")),

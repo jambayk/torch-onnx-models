@@ -16,7 +16,7 @@ class TextModel(nn.Module):
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, config.pad_token_id)
         self.layers = nn.ModuleList([DecoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.norm = RMSNorm(config.hidden_size, config)
+        self.norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = initialize_rope(config)
 
     def forward(
@@ -32,8 +32,8 @@ class TextModel(nn.Module):
 
         # get the attention bias
         attention_bias = create_attention_bias(
+            input_ids=input_ids,
             attention_mask=attention_mask,
-            query_length=input_ids.shape[-1],
             dtype=hidden_states.dtype,
         )
 
@@ -77,7 +77,6 @@ class CausalLMModel(nn.Module):
 
     def preprocess_weights(self, state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         """Preprocess the state_dict to match the model's expected keys."""
-        # For compatibility with HuggingFace models, we might need to rename some keys.
         if self.config.tie_word_embeddings:
             if "lm_head.weight" in state_dict:
                 state_dict["model.embed_tokens.weight"] = state_dict["lm_head.weight"]

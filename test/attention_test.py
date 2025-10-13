@@ -24,28 +24,20 @@ class AttentionTest(unittest.TestCase):
         past_length = 5
         seq_length = 10
         max_length = 100
-        attention_mask = torch.ones(
-            (batch_size, past_length + seq_length), dtype=torch.bool
-        )
+        attention_mask = torch.ones((batch_size, past_length + seq_length), dtype=torch.bool)
 
         inputs = {
             "hidden_states": torch.randn(batch_size, seq_length, config.hidden_size),
             "attention_bias": create_attention_bias(
+                input_ids=torch.zeros((batch_size, seq_length), dtype=torch.int64),
                 attention_mask=attention_mask,
-                query_length=seq_length,
                 dtype=torch.float32,
             ),
-            "position_ids": torch.arange(
-                past_length, past_length + seq_length
-            ).unsqueeze(0),
+            "position_ids": torch.arange(past_length, past_length + seq_length).unsqueeze(0),
             "cos_cache": torch.randn(max_length, config.head_dim // 2),
             "sin_cache": torch.randn(max_length, config.head_dim // 2),
-            "past_key": torch.randn(
-                batch_size, config.num_key_value_heads, past_length, config.head_dim
-            ),
-            "past_value": torch.randn(
-                batch_size, config.num_key_value_heads, past_length, config.head_dim
-            ),
+            "past_key": torch.randn(batch_size, config.num_key_value_heads, past_length, config.head_dim),
+            "past_value": torch.randn(batch_size, config.num_key_value_heads, past_length, config.head_dim),
         }
         dynamic_shapes = {
             # "hidden_states": {0: "batch_size", 1: "seq_length"},
