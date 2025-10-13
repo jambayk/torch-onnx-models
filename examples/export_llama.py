@@ -10,6 +10,7 @@ models = {
     # "phi-3_5-mini": "microsoft/Phi-3.5-mini-instruct",
     # "phi-4-mini": "microsoft/Phi-4-mini-instruct",
     # "qwen-2_5-1_5b": "Qwen/Qwen2.5-1.5B-Instruct",
+    # "qwen3-4b": "Qwen/Qwen3-4B-Instruct-2507",
 }
 
 for name, model_id in models.items():

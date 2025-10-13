@@ -5,16 +5,7 @@ import copy
 import torch
 from torch import nn
 
-from torch_onnx_models.components import (
-    apply_rms_norm,
-    apply_rotary_pos_emb,
-    attention,
-    create_attention_bias,
-    initialize_rope,
-    Attention,
-    MLP,
-    RMSNorm,
-)
+from torch_onnx_models.components import apply_rms_norm, create_attention_bias, initialize_rope, Attention, MLP, RMSNorm
 from torch_onnx_models._configs import ArchitectureConfig
 from torch_onnx_models.models.base import CausalLMModel
 
@@ -35,63 +26,11 @@ class Gemma3RMSNorm(RMSNorm):
         )
 
 
-class Gemma3Attention(Attention):
-    def __init__(self, config: ArchitectureConfig):
-        super().__init__(config)
-        self.q_norm = Gemma3RMSNorm(self.head_dim, eps=config.rms_norm_eps)
-        self.k_norm = Gemma3RMSNorm(self.head_dim, eps=config.rms_norm_eps)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_bias: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        past_key_value: tuple[torch.Tensor, torch.Tensor] | None = None,
-    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
-
-        if self.q_norm is not None and self.k_norm is not None:
-            input_shape = hidden_states.shape[:-1]
-            query_states = self.q_norm(query_states.view(*input_shape, -1, self.head_dim))
-            key_states = self.k_norm(key_states.view(*input_shape, -1, self.head_dim))
-            query_states = query_states.view(*input_shape, -1)
-            key_states = key_states.view(*input_shape, -1)
-
-        query_states = apply_rotary_pos_emb(
-            x=query_states,
-            position_embeddings=position_embeddings,
-            num_heads=self.num_attention_heads,
-            rotary_embedding_dim=self.rotary_embedding_dim,
-        )
-        key_states = apply_rotary_pos_emb(
-            x=key_states,
-            position_embeddings=position_embeddings,
-            num_heads=self.num_key_value_heads,
-            rotary_embedding_dim=self.rotary_embedding_dim,
-        )
-
-        attn_output, present_key, present_value = attention(
-            query=query_states,
-            key=key_states,
-            value=value_states,
-            bias=attention_bias,
-            past_key=past_key_value[0] if past_key_value is not None else None,
-            past_value=past_key_value[1] if past_key_value is not None else None,
-            q_num_heads=self.num_attention_heads,
-            kv_num_heads=self.num_key_value_heads,
-            scale=self.scaling,
-        )
-        attn_output = self.o_proj(attn_output)
-        return attn_output, (present_key, present_value)
-
-
 class Gemma3DecoderLayer(nn.Module):
     def __init__(self, config: ArchitectureConfig):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.self_attn = Gemma3Attention(config)
+        self.self_attn = Attention(config, rms_norm_class=Gemma3RMSNorm)
         self.mlp = MLP(config)
         self.input_layernorm = Gemma3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Gemma3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)

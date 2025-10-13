@@ -10,12 +10,16 @@ sys.path.append("Olive/scripts")
 from generator import ORTGenerator
 from transformers import AutoTokenizer
 
-base_model_name = "meta-llama/Llama-3.2-1B-Instruct"
-model_path = "llama-3_2-1b.onnx"
+# base_model_name = "meta-llama/Llama-3.2-1B-Instruct"
+# model_path = "llama-3_2-1b.onnx"
 # base_model_name = "meta-llama/Llama-2-7b-chat-hf"
 # model_path = "llama-2-7b.onnx"
 # base_model_name = "mistralai/Mistral-7B-Instruct-v0.3"
 # model_path = "mistral-7b.onnx"
+base_model_name = "google/gemma-3-270m-it"
+model_path = "gemma-3-270m.onnx"
+# base_model_name = "Qwen/Qwen3-4B-Instruct-2507"
+# model_path = "qwen3-4b.onnx"
 
 # load the tokenizer
 tokenizer = AutoTokenizer.from_pretrained(base_model_name, use_fast=True)
