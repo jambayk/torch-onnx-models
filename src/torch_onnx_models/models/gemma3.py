@@ -150,3 +150,12 @@ class Gemma3ConditionalGenerationModel(nn.Module):
         )
         logits = self.lm_head(hidden_states)
         return logits, present_key_values
+
+    def preprocess_weights(self, state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+        """Preprocess the state_dict to match the model's expected keys."""
+        if self.config.tie_word_embeddings:
+            if "lm_head.weight" in state_dict:
+                state_dict["model.language_model.embed_tokens.weight"] = state_dict["lm_head.weight"]
+            elif "model.language_model.embed_tokens.weight" in state_dict:
+                state_dict["lm_head.weight"] = state_dict["model.language_model.embed_tokens.weight"]
+        return state_dict

@@ -77,7 +77,6 @@ class CausalLMModel(nn.Module):
 
     def preprocess_weights(self, state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         """Preprocess the state_dict to match the model's expected keys."""
-        # For compatibility with HuggingFace models, we might need to rename some keys.
         if self.config.tie_word_embeddings:
             if "lm_head.weight" in state_dict:
                 state_dict["model.embed_tokens.weight"] = state_dict["lm_head.weight"]

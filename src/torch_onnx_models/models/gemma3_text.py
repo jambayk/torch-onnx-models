@@ -228,3 +228,14 @@ class Gemma3CausalLMModel(CausalLMModel):
         super().__init__(config)
         # override the model with Gemma3TextModel
         self.model = Gemma3TextModel(config)
+
+    def preprocess_weights(self, state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+        """Preprocess the state_dict to match the model's expected keys."""
+        # we can use the language model weights from the multimodal model
+        for key in list(state_dict.keys()):
+            if "language_model." in key:
+                new_key = key.replace("language_model.", "")
+                state_dict[new_key] = state_dict.pop(key)
+            elif "lm_head" not in key:
+                state_dict.pop(key)
+        return super().preprocess_weights(state_dict)

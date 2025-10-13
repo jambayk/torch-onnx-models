@@ -147,6 +147,8 @@ def convert_hf_model(
     # Need to use transformers to load config because transformers has additional
     # logic to standardize the config field names.
     config = transformers.AutoConfig.from_pretrained(model_id)
+    if hasattr(config, "text_config"):
+        config = config.text_config
     architecture_config = _configs.ArchitectureConfig.from_transformers(config)
 
     example_inputs, dynamic_shapes, input_names, output_names = _create_example_inputs(architecture_config, None)
