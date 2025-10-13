@@ -17,8 +17,8 @@ class DecoderLayer(nn.Module):
         self.hidden_size = config.hidden_size
         self.self_attn = Attention(config)
         self.mlp = MLP(config)
-        self.input_layernorm = RMSNorm(config.hidden_size, config)
-        self.post_attention_layernorm = RMSNorm(config.hidden_size, config)
+        self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,

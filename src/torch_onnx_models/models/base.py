@@ -16,7 +16,7 @@ class TextModel(nn.Module):
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, config.pad_token_id)
         self.layers = nn.ModuleList([DecoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.norm = RMSNorm(config.hidden_size, config)
+        self.norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = initialize_rope(config)
 
     def forward(
