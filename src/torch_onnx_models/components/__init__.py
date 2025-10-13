@@ -1,6 +1,7 @@
 __all__ = [
     "apply_rms_norm",
     "apply_rotary_pos_emb",
+    "attention",
     "Attention",
     "create_attention_bias",
     "get_activation",
@@ -11,7 +12,7 @@ __all__ = [
 ]
 
 from torch_onnx_models.components._attention import Attention
-from torch_onnx_models.components._attention_utils import create_attention_bias
+from torch_onnx_models.components._attention_utils import create_attention_bias, attention
 from torch_onnx_models.components._activations import get_activation
 from torch_onnx_models.components._mlp import MLP
 from torch_onnx_models.components._rms_norm_utils import apply_rms_norm

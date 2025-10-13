@@ -82,8 +82,7 @@ class Attention(nn.Module):
             rotary_embedding_dim=self.rotary_embedding_dim,
         )
 
-        attention_func = attention
-        attn_output, present_key, present_value = attention_func(
+        attn_output, present_key, present_value = attention(
             query=query_states,
             key=key_states,
             value=value_states,
