@@ -30,7 +30,7 @@ class Gemma3TextScaledWordEmbedding(nn.Embedding):
 
 class Gemma3RMSNorm(RMSNorm):
     def forward(self, hidden_states):
-        return apply_rms_norm(x=hidden_states.float(), weight=self.weight.float() + 1, eps=self.variance_epsilon).to(
+        return apply_rms_norm(x=hidden_states.float(), weight=self.weight.float() + 1.0, eps=self.variance_epsilon).to(
             hidden_states.dtype
         )
 
@@ -236,6 +236,6 @@ class Gemma3CausalLMModel(CausalLMModel):
             if "language_model." in key:
                 new_key = key.replace("language_model.", "")
                 state_dict[new_key] = state_dict.pop(key)
-            elif "lm_head" not in key:
+            elif "vision_tower" in key or "multi_modal_projector" in key:
                 state_dict.pop(key)
         return super().preprocess_weights(state_dict)

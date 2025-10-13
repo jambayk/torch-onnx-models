@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from functools import partial
 
 import torch
@@ -61,9 +62,11 @@ def create_image_mask(input_ids: torch.Tensor, attention_mask: torch.Tensor, ima
 
     is_img = input_ids == image_token_id
     leading_zero = torch.zeros((batch_size, 1), dtype=is_img.dtype, device=is_img.device)
+    # TODO(jambayk): maybe try a differen way to slice since it's creates unnecessary ops in the graph
     prev = torch.cat([leading_zero, is_img[:, :-1]], dim=1)
     starts = is_img & ~prev
     gid = torch.cumsum(starts, dim=1)
+    # full_like creates CastLike which might not be supported in some runtimes?
     gid = torch.where(is_img, gid, torch.full_like(gid, 0))
 
     q_gid = gid
@@ -153,6 +156,19 @@ class Gemma3ConditionalGenerationModel(nn.Module):
 
     def preprocess_weights(self, state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         """Preprocess the state_dict to match the model's expected keys."""
+        key_map = {
+            r"^language_model\.model": "model.language_model",
+            r"^vision_tower": "model.vision_tower",
+            r"^multi_modal_projector": "model.multi_modal_projector",
+            r"^language_model\.lm_head": "lm_head",
+        }
+        for key in list(state_dict.keys()):
+            for pattern, replacement in key_map.items():
+                new_key = re.sub(pattern, replacement, key)
+                if new_key != key:
+                    state_dict[new_key] = state_dict.pop(key)
+                    break
+
         if self.config.tie_word_embeddings:
             if "lm_head.weight" in state_dict:
                 state_dict["model.language_model.embed_tokens.weight"] = state_dict["lm_head.weight"]
