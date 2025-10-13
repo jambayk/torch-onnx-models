@@ -9,6 +9,7 @@ models = {
     # "gemma-3-4b": "google/gemma-3-4b-it",
     # "phi-3_5-mini": "microsoft/Phi-3.5-mini-instruct",
     # "phi-4-mini": "microsoft/Phi-4-mini-instruct",
+    # "qwen-2_5-1_5b": "Qwen/Qwen2.5-1.5B-Instruct",
 }
 
 for name, model_id in models.items():

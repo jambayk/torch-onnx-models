@@ -30,6 +30,7 @@ class TextModel(nn.Module):
         hidden_states = self.embed_tokens(input_ids)
         position_embeddings = self.rotary_emb(position_ids)
 
+        # TODO(jambayk): generalize this to models with hybrid attention
         # get the attention bias
         attention_bias = create_attention_bias(
             input_ids=input_ids,
