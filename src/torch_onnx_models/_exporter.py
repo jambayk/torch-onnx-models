@@ -30,6 +30,7 @@ MODEL_MAP = {
     "mistral": CausalLMModel,
     "phi3": Phi3CausalLMModel,
     "qwen2": CausalLMModel,
+    "qwen3": CausalLMModel,
 }
 
 

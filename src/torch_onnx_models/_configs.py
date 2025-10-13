@@ -22,7 +22,7 @@ SUPPORTED_ARCHITECTURES = {
     # "phi4mm",
     # "phimoe",
     "qwen2",
-    # "qwen3",
+    "qwen3",
     # "smollm3",
 }
 
@@ -53,13 +53,14 @@ class ArchitectureConfig:
     rope_theta: float = 10_000.0
     rope_scaling: dict | None = None
     partial_rotary_factor: float = 1.0  # 1.0 means no partial RoPE
-    rope_local_base_freq: float | None = None  # only for Gemma-3
+    rope_local_base_freq: float | None = None  # gemm3_text
     original_max_position_embeddings: int | None = None
 
     # need to separate qkv and o for qwen2
     # maybe find a better way to do this
     attn_qkv_bias: bool = False
     attn_o_bias: bool = False
+    attn_qk_norm: bool = False  # gemma3_text, qwen3
     mlp_bias: bool = False
 
     head_dim: int = DEFAULT_INT
@@ -95,6 +96,7 @@ class ArchitectureConfig:
             # qwen2 doesn't have this attribute, but it needs
             attn_qkv_bias=(getattr(config, "attention_bias", config.model_type == "qwen2")),
             attn_o_bias=(getattr(config, "attention_bias", False)),
+            attn_qk_norm=(config.model_type in ("gemma3_text", "qwen3")),
             mlp_bias=(getattr(config, "use_mlp_bias", False)),
             rope_type=rope_scaling.get("rope_type", rope_scaling.get("type", "default")),
             rope_theta=(getattr(config, "rope_theta", 10_000.0)),

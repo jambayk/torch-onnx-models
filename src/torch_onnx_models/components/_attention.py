@@ -10,7 +10,7 @@ from torch_onnx_models import _configs
 
 
 class Attention(nn.Module):
-    def __init__(self, config: _configs.ArchitectureConfig):
+    def __init__(self, config: _configs.ArchitectureConfig, rms_norm_class: type[nn.Module] = None):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.head_dim = config.head_dim
@@ -43,6 +43,14 @@ class Attention(nn.Module):
             bias=config.attn_o_bias,
         )
 
+        if config.attn_qk_norm:
+            rms_norm_class = RMSNorm if rms_norm_class is None else rms_norm_class
+            self.q_norm = rms_norm_class(self.head_dim, eps=config.rms_norm_eps)
+            self.k_norm = rms_norm_class(self.head_dim, eps=config.rms_norm_eps)
+        else:
+            self.q_norm = None
+            self.k_norm = None
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -53,6 +61,13 @@ class Attention(nn.Module):
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
+
+        if self.q_norm is not None and self.k_norm is not None:
+            input_shape = hidden_states.shape[:-1]
+            query_states = self.q_norm(query_states.view(*input_shape, -1, self.head_dim))
+            key_states = self.k_norm(key_states.view(*input_shape, -1, self.head_dim))
+            query_states = query_states.view(*input_shape, -1)
+            key_states = key_states.view(*input_shape, -1)
 
         query_states = apply_rotary_pos_emb(
             x=query_states,
