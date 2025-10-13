@@ -21,7 +21,7 @@ SUPPORTED_ARCHITECTURES = {
     # "phi3v",
     # "phi4mm",
     # "phimoe",
-    # "qwen2",
+    "qwen2",
     # "qwen3",
     # "smollm3",
 }
@@ -56,7 +56,10 @@ class ArchitectureConfig:
     rope_local_base_freq: float | None = None  # only for Gemma-3
     original_max_position_embeddings: int | None = None
 
-    attention_bias: bool = False
+    # need to separate qkv and o for qwen2
+    # maybe find a better way to do this
+    attn_qkv_bias: bool = False
+    attn_o_bias: bool = False
     mlp_bias: bool = False
 
     head_dim: int = DEFAULT_INT
@@ -89,7 +92,9 @@ class ArchitectureConfig:
             sliding_window=(getattr(config, "sliding_window", None)),
             pad_token_id=(getattr(config, "pad_token_id", 0)),  # FIXME
             rms_norm_eps=(getattr(config, "rms_norm_eps", 1e-6)),
-            attention_bias=(getattr(config, "add_bias_kv", False)),
+            # qwen2 doesn't have this attribute, but it needs
+            attn_qkv_bias=(getattr(config, "attention_bias", config.model_type == "qwen2")),
+            attn_o_bias=(getattr(config, "attention_bias", False)),
             mlp_bias=(getattr(config, "use_mlp_bias", False)),
             rope_type=rope_scaling.get("rope_type", rope_scaling.get("type", "default")),
             rope_theta=(getattr(config, "rope_theta", 10_000.0)),

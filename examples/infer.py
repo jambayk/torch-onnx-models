@@ -22,21 +22,16 @@ tokenizer = AutoTokenizer.from_pretrained(base_model_name, use_fast=True)
 
 # load the generator
 generator = ORTGenerator(
-    model_path, 
-    tokenizer, 
+    model_path,
+    tokenizer,
     execution_provider="CUDAExecutionProvider",
     # execution_provider="CPUExecutionProvider",
-    adapters={
-        "base": {
-            # llama 3
-            "template": "<|start_header_id|>user<|end_header_id|>\n{prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>"
-            # llama 2
-            # "template": "{prompt}"
-            # mistral
-            # "template": "[INST]{prompt}[/INST]"
-        }
-    }
 )
 
-prompt = "Why is the sky blue?"
-print(generator.generate(prompt, adapter="base", max_gen_len=100))
+prompt = "Why is the sky blue? Can it you explain it to me like I'm five years old?"
+full_prompt = (
+    tokenizer.apply_chat_template([{"role": "user", "content": prompt}], tokenize=False, add_generation_prompt=True)
+    if tokenizer.chat_template is not None
+    else prompt
+)
+print(generator.generate(full_prompt, max_gen_len=100))
