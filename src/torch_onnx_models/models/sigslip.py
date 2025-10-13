@@ -3,7 +3,7 @@ from __future__ import annotations
 import torch
 from torch import nn
 
-from torch_onnx_models.components import attention, ACT2FN
+from torch_onnx_models.components import attention, get_activation
 
 
 class SiglipVisionEmbeddings(nn.Module):
@@ -65,7 +65,7 @@ class SiglipAttention(nn.Module):
 class SiglipMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.activation_fn = ACT2FN[config.hidden_act]
+        self.activation_fn = get_activation(config.hidden_act)
         self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
         self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
 

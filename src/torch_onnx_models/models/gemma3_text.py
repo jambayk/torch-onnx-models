@@ -82,7 +82,7 @@ class Gemma3DecoderLayer(nn.Module):
     def __init__(self, config: ArchitectureConfig):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.self_attn = Attention(config)
+        self.self_attn = Gemma3Attention(config)
         self.mlp = MLP(config)
         self.input_layernorm = Gemma3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Gemma3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
