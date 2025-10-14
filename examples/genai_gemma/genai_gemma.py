@@ -16,7 +16,8 @@ if not text:
     exit()
 
 prompt = tokenizer.apply_chat_template(
-    messages=f"""[{{"role": "user", "content": "{text}"}}]""", add_generation_prompt=True
+    messages=f"""[{{"role": "user", "content": "{text}"}}]""",
+    add_generation_prompt=True,
 )
 
 input_tokens = tokenizer.encode(prompt)
