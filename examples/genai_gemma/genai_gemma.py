@@ -1,6 +1,18 @@
+from pathlib import Path
+
 import onnxruntime_genai as og
 
-model = og.Model("gemma-3-270m")
+model_path = "gemma-3-270m"
+model_id = "google/gemma-3-270m-it"
+
+model_dir = Path(__file__).parent / model_path
+if not (model_dir / "tokenizer_config.json").exists():
+    print("Saving tokenizer...")
+    from transformers import AutoTokenizer
+
+    AutoTokenizer.from_pretrained(model_id).save_pretrained(model_dir)
+
+model = og.Model(str(model_dir))
 tokenizer = og.Tokenizer(model)
 tokenizer_stream = tokenizer.create_stream()
 

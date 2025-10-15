@@ -1,0 +1,4 @@
+# only keep genai_config.json, other files are generated
+*
+!genai_config.json
+!.gitignore
